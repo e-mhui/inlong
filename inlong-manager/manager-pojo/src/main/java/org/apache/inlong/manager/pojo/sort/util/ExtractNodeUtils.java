@@ -234,7 +234,7 @@ public class ExtractNodeUtils {
             case CSV:
                 String fieldDelimiter = (String) pulsarSource.getProperties()
                         .get(InlongConstants.FIELD_DELIMITER);
-                format = StringUtils.isBlank(fieldDelimiter) ? new CsvFormat() : new CsvFormat(fieldDelimiter);
+                format = StringUtils.isEmpty(fieldDelimiter) ? new CsvFormat() : new CsvFormat(fieldDelimiter);
                 break;
             case AVRO:
                 format = new AvroFormat();
