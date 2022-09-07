@@ -20,6 +20,7 @@ package org.apache.inlong.manager.pojo.sort.util;
 import org.apache.inlong.manager.common.enums.FieldType;
 import org.apache.inlong.manager.common.util.JsonUtils;
 import org.apache.inlong.manager.pojo.fieldformat.ArrayFormat;
+import org.apache.inlong.manager.pojo.fieldformat.BinaryFormat;
 import org.apache.inlong.manager.pojo.fieldformat.DecimalFormat;
 import org.apache.inlong.manager.pojo.fieldformat.MapFormat;
 import org.apache.inlong.manager.pojo.fieldformat.StructFormat;
@@ -35,6 +36,10 @@ public class FieldFormatUtils {
 
     public static DecimalFormat parseDecimalFormat(String formatJson) {
         return JsonUtils.parseObject(formatJson, DecimalFormat.class);
+    }
+
+    public static BinaryFormat parseBinaryFormat(String formatJson) {
+        return JsonUtils.parseObject(formatJson, BinaryFormat.class);
     }
 
     public static String createArrayFormat(FieldType elementType, String elementFormat) {

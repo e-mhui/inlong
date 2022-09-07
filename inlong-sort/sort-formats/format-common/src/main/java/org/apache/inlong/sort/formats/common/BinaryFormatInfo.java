@@ -19,12 +19,24 @@
 package org.apache.inlong.sort.formats.common;
 
 import java.nio.charset.StandardCharsets;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
 
 public class BinaryFormatInfo implements BasicFormatInfo<byte[]> {
 
     private static final long serialVersionUID = 8379022656220694709L;
 
     public static final BinaryFormatInfo INSTANCE = new BinaryFormatInfo();
+
+    @JsonProperty("precision")
+    private int precision;
+
+    public BinaryFormatInfo() {
+        this.precision = 1;
+    }
+
+    public BinaryFormatInfo(@JsonProperty("precision") int precision) {
+        this.precision = precision;
+    }
 
     @Override
     public String serialize(byte[] record) throws Exception {
@@ -60,4 +72,11 @@ public class BinaryFormatInfo implements BasicFormatInfo<byte[]> {
         return "BinaryFormatInfo";
     }
 
+    public int getPrecision() {
+        return precision;
+    }
+
+    public void setPrecision(int precision) {
+        this.precision = precision;
+    }
 }

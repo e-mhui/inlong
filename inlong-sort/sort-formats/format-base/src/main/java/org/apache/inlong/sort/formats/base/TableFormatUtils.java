@@ -373,7 +373,8 @@ public class TableFormatUtils {
             }
             return RowType.of(logicalTypes, rowFormatInfo.getFieldNames());
         } else if (formatInfo instanceof BinaryFormatInfo) {
-            return new BinaryType();
+            BinaryFormatInfo binaryFormatInfo = (BinaryFormatInfo)formatInfo;
+            return new BinaryType(binaryFormatInfo.getPrecision());
         } else if (formatInfo instanceof NullFormatInfo) {
             return new NullType();
         } else {
