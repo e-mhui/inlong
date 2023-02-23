@@ -15,25 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.inlong.sort.base.dirty;
+package org.apache.inlong.agent.pojo;
 
-import lombok.extern.slf4j.Slf4j;
-import org.junit.Assert;
-import org.junit.Test;
+import lombok.Data;
 
-import java.io.IOException;
+@Data
+public class RedisJob {
 
-@Slf4j
-public class RegexReplaceTest {
+    private String authUser;
+    private String authPassword;
+    private String hostname;
+    private String port;
+    private Boolean ssl;
+    private String readTimeout;
+    private String queueSize;
+    private String replId;
 
-    @Test
-    public void testRegexReplacement() throws IOException {
-        String[] identifier = new String[2];
-        identifier[0] = "yizhouyang";
-        identifier[1] = "table2";
-        String pattern = "${database}-${table}-${DIRTY_MESSAGE}";
-        String answer = DirtySinkHelper.regexReplace(pattern, DirtyType.BATCH_LOAD_ERROR, "mock message", identifier[0],
-                identifier[1], null);
-        Assert.assertEquals("yizhouyang-table2-mock message", answer);
+    @Data
+    public static class RedisJobConfig {
+
+        private String username;
+        private String password;
+        private String hostname;
+        private String port;
+        private Boolean ssl;
+        private String timeout;
+        private String queueSize;
+        private String replId;
     }
 }
