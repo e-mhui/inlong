@@ -33,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class SenderGroup {
+
     private static final Logger logger = LoggerFactory.getLogger(SenderGroup.class);
     // maximum number of sending
     public static final int MAX_SEND_TIMES = 3;
@@ -79,6 +80,7 @@ public class SenderGroup {
         try {
             if (channels.size() <= 0) {
                 logger.error("channels is empty");
+                dataBuf.release();
                 return new SenderResult("channels is empty", 0, false);
             }
             boolean isOk = false;
@@ -110,6 +112,7 @@ public class SenderGroup {
             }
             if (channel == null) {
                 logger.error("can not get a channel");
+                dataBuf.release();
                 return new SenderResult("can not get a channel", 0, false);
             }
 
@@ -122,6 +125,8 @@ public class SenderGroup {
                     }
                     t = channel.getChannel().writeAndFlush(dataBuf).sync().await();
                 }
+            } else {
+                dataBuf.release();
             }
             return new SenderResult(channel.getIpPort().ip, channel.getIpPort().port, t.isSuccess());
         } catch (Throwable ex) {
@@ -226,4 +231,3 @@ public class SenderGroup {
     }
 
 }
-

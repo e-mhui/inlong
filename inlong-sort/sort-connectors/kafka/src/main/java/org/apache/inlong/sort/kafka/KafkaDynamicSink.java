@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,6 +36,8 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.utils.DataTypeUtils;
+import org.apache.inlong.sort.base.dirty.DirtyOptions;
+import org.apache.inlong.sort.base.dirty.sink.DirtySink;
 import org.apache.inlong.sort.kafka.DynamicKafkaSerializationSchema.MetadataConverter;
 import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
@@ -53,7 +54,6 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.inlong.sort.kafka.table.KafkaOptions.KAFKA_IGNORE_ALL_CHANGELOG;
 
@@ -103,6 +103,7 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
      * The Kafka topic to write to.
      */
     protected final String topic;
+    protected final String topicPattern;
     /**
      * Properties for the Kafka producer.
      */
@@ -139,11 +140,14 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
     /**
      * Metric for inLong
      */
-    private final String inLongMetric;
+    private final String inlongMetric;
     /**
      * audit host and ports
      */
     private final String auditHostAndPorts;
+    private @Nullable final String sinkMultipleFormat;
+    private final DirtyOptions dirtyOptions;
+    private @Nullable final DirtySink<Object> dirtySink;
     /**
      * Metadata that is appended at the end of a physical sink row.
      */
@@ -152,6 +156,8 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
      * Data type of consumed data type.
      */
     protected DataType consumedDataType;
+
+    private boolean multipleSink;
 
     /**
      * Constructor of KafkaDynamicSink.
@@ -172,8 +178,13 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
             boolean upsertMode,
             SinkBufferFlushMode flushMode,
             @Nullable Integer parallelism,
-            String inLongMetric,
-            String auditHostAndPorts) {
+            String inlongMetric,
+            String auditHostAndPorts,
+            @Nullable String sinkMultipleFormat,
+            @Nullable String topicPattern,
+            DirtyOptions dirtyOptions,
+            @Nullable DirtySink<Object> dirtySink,
+            boolean multipleSink) {
         // Format attributes
         this.consumedDataType =
                 checkNotNull(consumedDataType, "Consumed data type must not be null.");
@@ -200,8 +211,13 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
                     "Sink buffer flush is only supported in upsert-kafka.");
         }
         this.parallelism = parallelism;
-        this.inLongMetric = inLongMetric;
+        this.inlongMetric = inlongMetric;
         this.auditHostAndPorts = auditHostAndPorts;
+        this.sinkMultipleFormat = sinkMultipleFormat;
+        this.topicPattern = topicPattern;
+        this.dirtyOptions = dirtyOptions;
+        this.dirtySink = dirtySink;
+        this.multipleSink = multipleSink;
     }
 
     @Override
@@ -224,7 +240,7 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
                 createSerialization(context, valueEncodingFormat, valueProjection, null);
 
         final FlinkKafkaProducer<RowData> kafkaProducer =
-                createKafkaProducer(keySerialization, valueSerialization);
+                createKafkaProducer(keySerialization, valueSerialization, sinkMultipleFormat);
 
         if (flushMode.isEnabled() && upsertMode) {
             BufferedUpsertSinkFunction buffedSinkFunction =
@@ -302,8 +318,13 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
                         upsertMode,
                         flushMode,
                         parallelism,
-                        inLongMetric,
-                        auditHostAndPorts);
+                        inlongMetric,
+                        auditHostAndPorts,
+                        sinkMultipleFormat,
+                        topicPattern,
+                        dirtyOptions,
+                        dirtySink,
+                        multipleSink);
         copy.metadataKeys = metadataKeys;
         return copy;
     }
@@ -337,7 +358,7 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
                 && Objects.equals(upsertMode, that.upsertMode)
                 && Objects.equals(flushMode, that.flushMode)
                 && Objects.equals(parallelism, that.parallelism)
-                && Objects.equals(inLongMetric, that.inLongMetric)
+                && Objects.equals(inlongMetric, that.inlongMetric)
                 && Objects.equals(auditHostAndPorts, that.auditHostAndPorts);
     }
 
@@ -359,31 +380,32 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
                 upsertMode,
                 flushMode,
                 parallelism,
-                inLongMetric,
-                auditHostAndPorts);
+                inlongMetric,
+                auditHostAndPorts,
+                sinkMultipleFormat,
+                topicPattern);
     }
 
     // --------------------------------------------------------------------------------------------
 
     protected FlinkKafkaProducer<RowData> createKafkaProducer(
             SerializationSchema<RowData> keySerialization,
-            SerializationSchema<RowData> valueSerialization) {
+            SerializationSchema<RowData> valueSerialization,
+            String sinkMultipleFormat) {
         final List<LogicalType> physicalChildren = physicalDataType.getLogicalType().getChildren();
 
         final RowData.FieldGetter[] keyFieldGetters =
                 Arrays.stream(keyProjection)
                         .mapToObj(
-                                targetField ->
-                                        RowData.createFieldGetter(
-                                                physicalChildren.get(targetField), targetField))
+                                targetField -> RowData.createFieldGetter(
+                                        physicalChildren.get(targetField), targetField))
                         .toArray(RowData.FieldGetter[]::new);
 
         final RowData.FieldGetter[] valueFieldGetters =
                 Arrays.stream(valueProjection)
                         .mapToObj(
-                                targetField ->
-                                        RowData.createFieldGetter(
-                                                physicalChildren.get(targetField), targetField))
+                                targetField -> RowData.createFieldGetter(
+                                        physicalChildren.get(targetField), targetField))
                         .toArray(RowData.FieldGetter[]::new);
 
         // determine the positions of metadata in the consumed row
@@ -412,7 +434,11 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
                         valueFieldGetters,
                         hasMetadata,
                         metadataPositions,
-                        upsertMode);
+                        upsertMode,
+                        sinkMultipleFormat,
+                        topicPattern,
+                        dirtyOptions,
+                        dirtySink);
 
         return new FlinkKafkaProducer<>(
                 topic,
@@ -420,8 +446,9 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
                 properties,
                 FlinkKafkaProducer.Semantic.valueOf(semantic.toString()),
                 FlinkKafkaProducer.DEFAULT_KAFKA_PRODUCERS_POOL_SIZE,
-                inLongMetric,
-                auditHostAndPorts);
+                inlongMetric,
+                auditHostAndPorts,
+                multipleSink);
     }
 
     private @Nullable SerializationSchema<RowData> createSerialization(
@@ -445,12 +472,14 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
     // --------------------------------------------------------------------------------------------
 
     enum WritableMetadata {
+
         HEADERS(
                 "headers",
                 // key and value of the map are nullable to make handling easier in queries
                 DataTypes.MAP(DataTypes.STRING().nullable(), DataTypes.BYTES().nullable())
                         .nullable(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override
@@ -477,6 +506,7 @@ public class KafkaDynamicSink implements DynamicTableSink, SupportsWritingMetada
                 "timestamp",
                 DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE(3).nullable(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override

@@ -23,9 +23,11 @@ ENV_ARCH=$(uname -m)
 BUILD_ARCH="aarch64"
 POSTFIX="-aarch64"
 
-PLATFORM_AARCH64="--platform linux/arm64/v8"
+PLATFORM_AARCH64="--platform linux/arm64"
 PLATFORM_X86="--platform linux/amd64"
 USE_PLATFORM=""
+
+TYPE=""
 
 SHELL_FOLDER=$(cd "$(dirname "$0")";pwd)
 
@@ -51,11 +53,17 @@ for (( i=1; i<=$#; i++)); do
   if [ "${!i}" = "-x" ] || [ "${!i}" = "--buildx" ]; then
     NEED_BUILD=true
     USE_BUILDX="buildx"
+    TYPE="-o type=docker"
     j=$((i+1))
     BUILD_ARCH=${!j}
     if [ "$BUILD_ARCH" != "$ARCH_AARCH64" ] && [ "$BUILD_ARCH" != "$ARCH_X86" ]; then
       echo "Wrong arch name: ${BUILD_ARCH}. Please input aarch64 or x86."
       exit 1
+    fi
+    if [ "$BUILD_ARCH" = "$ARCH_AARCH64" ]; then
+      USE_PLATFORM="$PLATFORM_AARCH64"
+    else
+      USE_PLATFORM="$PLATFORM_X86"
     fi
     shift
   elif [ "${!i}" = "-h" ] || [ "${!i}" = "--help" ]; then
@@ -113,36 +121,46 @@ TUBEMQ_TARBALL="target/${tubemq_all_tarball_name}"
 cp ${manager_tarball} ${manager_dockerfile_path}/target/${manager_target_tarball_name}
 cp inlong-sort/sort-dist/target/sort-dist-${version}.jar ${manager_dockerfile_path}/target/
 cp inlong-sort/sort-connectors/pulsar/target/sort-connector-pulsar-${version}.jar ${manager_dockerfile_path}/target/
+cp inlong-sort/sort-connectors/kafka/target/sort-connector-kafka-${version}.jar ${manager_dockerfile_path}/target/
 cp inlong-sort/sort-connectors/jdbc/target/sort-connector-jdbc-${version}.jar ${manager_dockerfile_path}/target/
 cp inlong-sort/sort-connectors/hive/target/sort-connector-hive-${version}.jar ${manager_dockerfile_path}/target/
 cp ${agent_tarball} ${agent_dockerfile_path}/target/${agent_tarball_name}
 cp ${audit_tarball} ${audit_dockerfile_path}/target/${audit_tarball_name}
 cp ${dataproxy_tarball} ${dataproxy_dockerfile_path}/target/${dataproxy_tarball_name}
 cp ${tubemq_manager_tarball} ${tubemq_manager_dockerfile_path}/target/${tubemq_manager_tarball_name}
+cp ${tubemq_all_tarball} ${tubemq_all_dockerfile_path}/target/${tubemq_all_tarball_name}
+
+echo "=== Start to build ============"
+echo "=== Build docker tag:${tag} ==="
+
+docker ${USE_BUILDX} build ${USE_PLATFORM} ${TYPE} -t inlong/manager:${tag}        inlong-manager/manager-docker/      --build-arg VERSION=${version}
+docker ${USE_BUILDX} build ${USE_PLATFORM} ${TYPE} -t inlong/dataproxy:${tag}      inlong-dataproxy/dataproxy-docker/  --build-arg DATAPROXY_TARBALL=${DATAPROXY_TARBALL}
+docker ${USE_BUILDX} build ${USE_PLATFORM} ${TYPE} -t inlong/audit:${tag}          inlong-audit/audit-docker/          --build-arg AUDIT_TARBALL=${AUDIT_TARBALL}
+docker ${USE_BUILDX} build ${USE_PLATFORM} ${TYPE} -t inlong/dashboard:${tag}      inlong-dashboard/                   --build-arg DASHBOARD_FILE=${DASHBOARD_FILE}
+docker ${USE_BUILDX} build ${USE_PLATFORM} ${TYPE} -t inlong/agent:${tag}          inlong-agent/agent-docker/          --build-arg AGENT_TARBALL=${AGENT_TARBALL}
+docker ${USE_BUILDX} build ${USE_PLATFORM} ${TYPE} -t inlong/tubemq-manager:${tag} inlong-tubemq/tubemq-docker/tubemq-manager/ --build-arg TUBEMQ_MANAGER_TARBALL=${TUBEMQ_MANAGER_TARBALL}
 if [ "$BUILD_ARCH" = "$ARCH_X86" ]; then
-  cp ${tubemq_all_tarball} ${tubemq_all_dockerfile_path}/target/${tubemq_all_tarball_name}
+  docker ${USE_BUILDX} build ${USE_PLATFORM} ${TYPE} -t inlong/tubemq-all:${tag}     inlong-tubemq/tubemq-docker/tubemq-all/     --build-arg TUBEMQ_TARBALL=${TUBEMQ_TARBALL}
+  docker ${USE_BUILDX} build ${USE_PLATFORM} ${TYPE} -t inlong/tubemq-build:${tag}  inlong-tubemq/tubemq-docker/tubemq-build/
 fi
 
-docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/manager:${tag}        inlong-manager/manager-docker/      --build-arg VERSION=${version}
-docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/dataproxy:${tag}      inlong-dataproxy/dataproxy-docker/  --build-arg DATAPROXY_TARBALL=${DATAPROXY_TARBALL}
-docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/audit:${tag}          inlong-audit/audit-docker/          --build-arg AUDIT_TARBALL=${AUDIT_TARBALL}
-docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/tubemq-manager:${tag} inlong-tubemq/tubemq-docker/tubemq-manager/ --build-arg TUBEMQ_MANAGER_TARBALL=${TUBEMQ_MANAGER_TARBALL}
-docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/dashboard:${tag}      inlong-dashboard/                   --build-arg DASHBOARD_FILE=${DASHBOARD_FILE}
-docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/agent:${tag}          inlong-agent/agent-docker/          --build-arg AGENT_TARBALL=${AGENT_TARBALL}
-if [ "$BUILD_ARCH" = "$ARCH_X86" ]; then
-  docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/tubemq-all:${tag}    inlong-tubemq/tubemq-docker/tubemq-all/ --build-arg TUBEMQ_TARBALL=${TUBEMQ_TARBALL}
-  docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/tubemq-cpp:${tag}    inlong-tubemq/tubemq-docker/tubemq-cpp/
-  docker ${USE_BUILDX} build ${USE_PLATFORM} -t inlong/tubemq-build:${tag}  inlong-tubemq/tubemq-docker/tubemq-build/
-fi
+echo "=== Build images result ======="
+docker images | grep inlong
+echo "=== End build ================="
 
+echo "=== Start to tag =============="
+echo "=== Tag postfix:${POSTFIX} ===="
 docker tag inlong/manager:${tag}         inlong/manager:latest${POSTFIX}
 docker tag inlong/dataproxy:${tag}       inlong/dataproxy:latest${POSTFIX}
 docker tag inlong/audit:${tag}           inlong/audit:latest${POSTFIX}
 docker tag inlong/tubemq-manager:${tag}  inlong/tubemq-manager:latest${POSTFIX}
 docker tag inlong/dashboard:${tag}       inlong/dashboard:latest${POSTFIX}
 docker tag inlong/agent:${tag}           inlong/agent:latest${POSTFIX}
+docker tag inlong/tubemq-all:${tag}      inlong/tubemq-all:latest${POSTFIX}
 if [ "$BUILD_ARCH" = "$ARCH_X86" ]; then
-  docker tag inlong/tubemq-cpp:${tag}   inlong/tubemq-cpp:latest${POSTFIX}
   docker tag inlong/tubemq-build:${tag} inlong/tubemq-build:latest${POSTFIX}
-  docker tag inlong/tubemq-all:${tag}   inlong/tubemq-all:latest${POSTFIX}
 fi
+
+echo "=== Tag images result ========="
+docker images | grep inlong
+echo "=== End tag ==================="

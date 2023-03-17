@@ -29,11 +29,11 @@ public interface AttributeConstants {
     String GROUP_ID = "groupId";
 
     /**
-     * interface id
+     * stream id
      * unique string id for each interface of business
-     * An interface stand for a kind of data
+     * An steam stand for a kind of data
      */
-    String INTERFACE_ID = "streamId";
+    String STREAM_ID = "streamId";
 
     /**
      * iname is like a streamId but used in file protocol(m=xxx)
@@ -44,7 +44,6 @@ public interface AttributeConstants {
      * data time
      */
     String DATA_TIME = "dt";
-
     String TIME_STAMP = "t";
 
     /* compress type */
@@ -59,7 +58,7 @@ public interface AttributeConstants {
     /* sort type */
     String METHOD = "m";
 
-    /* global unique id for a message*/
+    /* global unique id for a message */
     String SEQUENCE_ID = "sid";
 
     String UNIQ_ID = "uniq";
@@ -67,8 +66,47 @@ public interface AttributeConstants {
     /* from where */
     String FROM = "f";
 
+    // whether to return a response, false: not need, true or not exist: need
+    String MESSAGE_IS_ACK = "isAck";
+
+    // whether sync send message
+    String MESSAGE_SYNC_SEND = "syncSend";
+
+    // whether sent by partition key, use with MESSAGE_SYNC_SEND
+    String MESSAGE_PARTITION_KEY = "partitionKey";
+
+    // whether return response on sink
+    String MESSAGE_PROXY_SEND = "proxySend";
+
+    // message received time, add by receiver
     String RCV_TIME = "rt";
 
+    // message received node ip, add by receiver
     String NODE_IP = "NodeIP";
 
+    // error code, add by receiver
+    String MESSAGE_PROCESS_ERRCODE = "errCode";
+
+    // error message, add by receiver
+    String MESSAGE_PROCESS_ERRMSG = "errMsg";
+
+    String MESSAGE_ID = "messageId";
+
+    // dataproxy IP from dp response ack
+    String MESSAGE_DP_IP = "dpIP";
+
+    String MESSAGE_TOPIC = "topic";
+
+    // dataproxy IP, used in trace info
+    String DATAPROXY_NODE_IP = "node2ip";
+
+    // dataproxy received time, used in trace info
+    String DATAPROXY_RCVTIME = "rtime2";
+
+    // Message reporting time, in milliseconds
+    // Provided by the initial sender of the data, and passed to
+    // the downstream by the Bus without modification for the downstream to
+    // calculate the end-to-end message delay; if this field does not exist in the request,
+    // it will be added by the Bus with the current time
+    public static final String MSG_RPT_TIME = "rtms";
 }

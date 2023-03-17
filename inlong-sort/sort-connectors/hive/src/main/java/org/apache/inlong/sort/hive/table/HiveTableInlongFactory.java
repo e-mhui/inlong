@@ -34,6 +34,9 @@ import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.filesystem.FileSystemOptions;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.inlong.sort.base.dirty.DirtyOptions;
+import org.apache.inlong.sort.base.dirty.sink.DirtySink;
+import org.apache.inlong.sort.base.dirty.utils.DirtySinkFactoryUtils;
 import org.apache.inlong.sort.hive.HiveTableSink;
 
 import java.util.Collections;
@@ -48,6 +51,7 @@ import static org.apache.flink.table.catalog.hive.factories.HiveCatalogFactoryOp
 import static org.apache.flink.table.factories.FactoryUtil.PROPERTY_VERSION;
 import static org.apache.flink.table.filesystem.FileSystemOptions.STREAMING_SOURCE_ENABLE;
 import static org.apache.flink.table.filesystem.FileSystemOptions.STREAMING_SOURCE_PARTITION_INCLUDE;
+import static org.apache.inlong.sort.base.Constants.AUDIT_KEYS;
 import static org.apache.inlong.sort.base.Constants.INLONG_AUDIT;
 import static org.apache.inlong.sort.base.Constants.INLONG_METRIC;
 import static org.apache.inlong.sort.hive.HiveOptions.HIVE_DATABASE;
@@ -88,6 +92,7 @@ public class HiveTableInlongFactory implements DynamicTableSourceFactory, Dynami
         options.add(HADOOP_CONF_DIR);
         options.add(INLONG_METRIC);
         options.add(INLONG_AUDIT);
+        options.add(AUDIT_KEYS);
         return options;
     }
 
@@ -98,23 +103,26 @@ public class HiveTableInlongFactory implements DynamicTableSourceFactory, Dynami
         // temporary table doesn't have the IS_GENERIC flag but we still consider it generic
         if (isHiveTable) {
             updateHiveConf(options);
-            //  new HiveValidator().validate(properties);
-                        Integer configuredParallelism =
-                                Configuration.fromMap(context.getCatalogTable().getOptions())
-                                        .get(FileSystemOptions.SINK_PARALLELISM);
-            final String inLongMetric = context.getCatalogTable().getOptions()
+            // new HiveValidator().validate(properties);
+            Integer configuredParallelism =
+                    Configuration.fromMap(context.getCatalogTable().getOptions())
+                            .get(FileSystemOptions.SINK_PARALLELISM);
+            final String inlongMetric = context.getCatalogTable().getOptions()
                     .getOrDefault(INLONG_METRIC.key(), INLONG_METRIC.defaultValue());
             final String auditHostAndPorts = context.getCatalogTable().getOptions()
                     .getOrDefault(INLONG_AUDIT.key(), INLONG_AUDIT.defaultValue());
-
+            final DirtyOptions dirtyOptions = DirtyOptions.fromConfig(Configuration.fromMap(options));
+            final DirtySink<Object> dirtySink = DirtySinkFactoryUtils.createDirtySink(context, dirtyOptions);
             return new HiveTableSink(
                     context.getConfiguration(),
                     new JobConf(hiveConf),
                     context.getObjectIdentifier(),
                     context.getCatalogTable(),
                     configuredParallelism,
-                    inLongMetric,
-                    auditHostAndPorts);
+                    inlongMetric,
+                    auditHostAndPorts,
+                    dirtyOptions,
+                    dirtySink);
         } else {
             return FactoryUtil.createTableSink(
                     null, // we already in the factory of catalog

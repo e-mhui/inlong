@@ -17,11 +17,11 @@
 
 package org.apache.inlong.manager.client.api.inner.client;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.service.InlongClusterApi;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
-import org.apache.inlong.manager.pojo.common.Response;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
+import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.pojo.cluster.BindTagRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterInfo;
 import org.apache.inlong.manager.pojo.cluster.ClusterNodeRequest;
@@ -31,7 +31,11 @@ import org.apache.inlong.manager.pojo.cluster.ClusterRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagPageRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagResponse;
-import org.apache.inlong.manager.common.util.Preconditions;
+import org.apache.inlong.manager.pojo.common.PageResult;
+import org.apache.inlong.manager.pojo.common.Response;
+import org.apache.inlong.manager.pojo.common.UpdateResult;
+
+import java.util.List;
 
 /**
  * Client for {@link InlongClusterApi}.
@@ -63,7 +67,7 @@ public class InlongClusterClient {
      * @return cluster tag info
      */
     public ClusterTagResponse getTag(Integer id) {
-        Preconditions.checkNotNull(id, "cluster id should not be empty");
+        Preconditions.expectNotNull(id, "cluster id should not be empty");
         Response<ClusterTagResponse> response = ClientUtils.executeHttpCall(inlongClusterApi.getTag(id));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -75,8 +79,8 @@ public class InlongClusterClient {
      * @param request page request conditions
      * @return cluster tag list
      */
-    public PageInfo<ClusterTagResponse> listTag(ClusterTagPageRequest request) {
-        Response<PageInfo<ClusterTagResponse>> response = ClientUtils.executeHttpCall(
+    public PageResult<ClusterTagResponse> listTag(ClusterTagPageRequest request) {
+        Response<PageResult<ClusterTagResponse>> response = ClientUtils.executeHttpCall(
                 inlongClusterApi.listTag(request));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -101,7 +105,7 @@ public class InlongClusterClient {
      * @return whether succeed
      */
     public Boolean deleteTag(Integer id) {
-        Preconditions.checkNotNull(id, "cluster id should not be empty");
+        Preconditions.expectNotNull(id, "cluster id should not be empty");
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongClusterApi.deleteTag(id));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -114,9 +118,12 @@ public class InlongClusterClient {
      * @return clusterIndex
      */
     public Integer saveCluster(ClusterRequest request) {
-        Preconditions.checkNotEmpty(request.getName(), "cluster name should not be empty");
-        Preconditions.checkNotEmpty(request.getType(), "cluster type should not be empty");
-        Preconditions.checkNotEmpty(request.getClusterTags(), "cluster tags should not be empty");
+        Preconditions.expectNotBlank(request.getName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "cluster name should not be empty");
+        Preconditions.expectNotBlank(request.getType(), ErrorCodeEnum.INVALID_PARAMETER,
+                "cluster type should not be empty");
+        Preconditions.expectNotBlank(request.getClusterTags(), ErrorCodeEnum.INVALID_PARAMETER,
+                "cluster tags should not be empty");
         Response<Integer> clusterIndexResponse = ClientUtils.executeHttpCall(inlongClusterApi.save(request));
         ClientUtils.assertRespSuccess(clusterIndexResponse);
         return clusterIndexResponse.getData();
@@ -129,7 +136,7 @@ public class InlongClusterClient {
      * @return cluster info
      */
     public ClusterInfo get(Integer id) {
-        Preconditions.checkNotNull(id, "cluster id should not be empty");
+        Preconditions.expectNotNull(id, "cluster id should not be empty");
         Response<ClusterInfo> clusterInfoResponse = ClientUtils.executeHttpCall(inlongClusterApi.get(id));
         ClientUtils.assertRespSuccess(clusterInfoResponse);
         return clusterInfoResponse.getData();
@@ -141,10 +148,10 @@ public class InlongClusterClient {
      * @param request query conditions
      * @return cluster list
      */
-    public ClusterInfo list(ClusterPageRequest request) {
-        Response<ClusterInfo> clusterInfoResponse = ClientUtils.executeHttpCall(inlongClusterApi.list(request));
-        ClientUtils.assertRespSuccess(clusterInfoResponse);
-        return clusterInfoResponse.getData();
+    public PageResult<ClusterInfo> list(ClusterPageRequest request) {
+        Response<PageResult<ClusterInfo>> response = ClientUtils.executeHttpCall(inlongClusterApi.list(request));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData();
     }
 
     /**
@@ -154,7 +161,26 @@ public class InlongClusterClient {
      * @return whether succeed
      */
     public Boolean update(ClusterRequest request) {
+        Preconditions.expectNotNull(request.getId(), "inlong cluster id cannot be empty");
+
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongClusterApi.update(request));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData();
+    }
+
+    /**
+     * Update cluster information by unique key.
+     * Cluster name and type should not be null.
+     *
+     * @param request cluster to be modified
+     * @return update result
+     */
+    public UpdateResult updateByKey(ClusterRequest request) {
+        Preconditions.expectNotBlank(request.getName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "cluster name should not be null");
+        Preconditions.expectNotBlank(request.getType(), ErrorCodeEnum.INVALID_PARAMETER,
+                "cluster type should not be null");
+        Response<UpdateResult> response = ClientUtils.executeHttpCall(inlongClusterApi.updateByKey(request));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }
@@ -178,8 +204,23 @@ public class InlongClusterClient {
      * @return whether succeed
      */
     public Boolean delete(Integer id) {
-        Preconditions.checkNotNull(id, "cluster id should not be empty");
+        Preconditions.expectNotNull(id, "cluster id should not be empty");
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongClusterApi.delete(id));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData();
+    }
+
+    /**
+     * Delete cluster by name and type
+     *
+     * @param name cluster name
+     * @param type cluster type
+     * @return wheter succeed
+     */
+    public Boolean deleteByKey(String name, String type) {
+        Preconditions.expectNotBlank(name, ErrorCodeEnum.INVALID_PARAMETER, "cluster name should not be empty");
+        Preconditions.expectNotBlank(type, ErrorCodeEnum.INVALID_PARAMETER, "cluster type should not be empty");
+        Response<Boolean> response = ClientUtils.executeHttpCall(inlongClusterApi.deleteByKey(name, type));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }
@@ -203,7 +244,7 @@ public class InlongClusterClient {
      * @return cluster info
      */
     public ClusterNodeResponse getNode(Integer id) {
-        Preconditions.checkNotNull(id, "cluster id should not be empty");
+        Preconditions.expectNotNull(id, "cluster id should not be empty");
         Response<ClusterNodeResponse> response = ClientUtils.executeHttpCall(inlongClusterApi.getNode(id));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -215,9 +256,24 @@ public class InlongClusterClient {
      * @param request page request conditions
      * @return cluster node list
      */
-    public PageInfo<ClusterNodeResponse> listNode(ClusterPageRequest request) {
-        Response<PageInfo<ClusterNodeResponse>> response = ClientUtils.executeHttpCall(
+    public PageResult<ClusterNodeResponse> listNode(ClusterPageRequest request) {
+        Response<PageResult<ClusterNodeResponse>> response = ClientUtils.executeHttpCall(
                 inlongClusterApi.listNode(request));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData();
+    }
+
+    /**
+     * List cluster nodes
+     *
+     * @param inlongGroupId inlong group id
+     * @param clusterType cluster type
+     * @param protocolType protocol type, such as: TCP, HTTP
+     * @return cluster node list
+     */
+    public List<ClusterNodeResponse> listNode(String inlongGroupId, String clusterType, String protocolType) {
+        Response<List<ClusterNodeResponse>> response = ClientUtils.executeHttpCall(
+                inlongClusterApi.listNodeByGroupId(inlongGroupId, clusterType, protocolType));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }
@@ -241,7 +297,7 @@ public class InlongClusterClient {
      * @return whether succeed
      */
     public Boolean deleteNode(Integer id) {
-        Preconditions.checkNotNull(id, "cluster id should not be empty");
+        Preconditions.expectNotNull(id, "cluster id should not be empty");
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongClusterApi.deleteNode(id));
         ClientUtils.assertRespSuccess(response);
         return response.getData();

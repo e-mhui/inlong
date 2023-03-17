@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,19 +27,20 @@ import org.apache.flink.table.connector.format.EncodingFormat;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkFunctionProvider;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.types.RowKind;
 import org.apache.flink.util.StringUtils;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.inlong.sort.base.dirty.DirtySinkHelper;
 import org.apache.inlong.sort.elasticsearch.table.IndexGeneratorFactory;
 import org.apache.inlong.sort.elasticsearch.table.KeyExtractor;
 import org.apache.inlong.sort.elasticsearch.table.RequestFactory;
 import org.apache.inlong.sort.elasticsearch.table.RoutingExtractor;
-import org.apache.inlong.sort.elasticsearch.table.RowElasticsearchSinkFunction;
 import org.apache.inlong.sort.elasticsearch6.ElasticsearchSink;
+import org.apache.inlong.sort.elasticsearch6.RowElasticsearchSinkFunction;
+import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
@@ -59,14 +59,15 @@ import java.util.Objects;
 final class Elasticsearch6DynamicSink implements DynamicTableSink {
 
     @VisibleForTesting
-    static final Elasticsearch6RequestFactory REQUEST_FACTORY = new Elasticsearch6RequestFactory();
+    private final static Elasticsearch6RequestFactory REQUEST_FACTORY = new Elasticsearch6RequestFactory();
 
     private final EncodingFormat<SerializationSchema<RowData>> format;
     private final TableSchema schema;
     private final Elasticsearch6Configuration config;
-    private final String inLongMetric;
+    private final String inlongMetric;
     private final String auditHostAndPorts;
     private final ElasticSearchBuilderProvider builderProvider;
+    private final DirtySinkHelper<Object> dirtySinkHelper;
 
     // --------------------------------------------------------------
     // Hack to make configuration testing possible.
@@ -82,9 +83,11 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
             EncodingFormat<SerializationSchema<RowData>> format,
             Elasticsearch6Configuration config,
             TableSchema schema,
-            String inLongMetric,
-            String auditHostAndPorts) {
-        this(format, config, schema, (ElasticsearchSink.Builder::new), inLongMetric, auditHostAndPorts);
+            String inlongMetric,
+            String auditHostAndPorts,
+            DirtySinkHelper<Object> dirtySinkHelper) {
+        this(format, config, schema, (ElasticsearchSink.Builder::new),
+                inlongMetric, auditHostAndPorts, dirtySinkHelper);
     }
 
     Elasticsearch6DynamicSink(
@@ -92,25 +95,21 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
             Elasticsearch6Configuration config,
             TableSchema schema,
             ElasticSearchBuilderProvider builderProvider,
-            String inLongMetric,
-            String auditHostAndPorts) {
+            String inlongMetric,
+            String auditHostAndPorts,
+            DirtySinkHelper<Object> dirtySinkHelper) {
         this.format = format;
         this.schema = schema;
         this.config = config;
         this.builderProvider = builderProvider;
-        this.inLongMetric = inLongMetric;
+        this.inlongMetric = inlongMetric;
         this.auditHostAndPorts = auditHostAndPorts;
+        this.dirtySinkHelper = dirtySinkHelper;
     }
 
     @Override
     public ChangelogMode getChangelogMode(ChangelogMode requestedMode) {
-        ChangelogMode.Builder builder = ChangelogMode.newBuilder();
-        for (RowKind kind : requestedMode.getContainedKinds()) {
-            if (kind != RowKind.UPDATE_BEFORE) {
-                builder.addContainedKind(kind);
-            }
-        }
-        return builder.build();
+        return ChangelogMode.all();
     }
 
     // --------------------------------------------------------------
@@ -133,22 +132,21 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
                             KeyExtractor.createKeyExtractor(schema, config.getKeyDelimiter()),
                             RoutingExtractor.createRoutingExtractor(
                                     schema, config.getRoutingField().orElse(null)),
-                            inLongMetric,
-                            auditHostAndPorts);
+                            dirtySinkHelper);
 
             final ElasticsearchSink.Builder<RowData> builder =
                     builderProvider.createBuilder(config.getHosts(), upsertFunction);
-
             builder.setFailureHandler(config.getFailureHandler());
             builder.setBulkFlushMaxActions(config.getBulkFlushMaxActions());
             builder.setBulkFlushMaxSizeMb((int) (config.getBulkFlushMaxByteSize() >> 20));
             builder.setBulkFlushInterval(config.getBulkFlushInterval());
             builder.setBulkFlushBackoff(config.isBulkFlushBackoffEnabled());
-            builder.setInLongMetric(inLongMetric);
+            builder.setInLongMetric(inlongMetric);
+            builder.setDirtySinkHelper(dirtySinkHelper);
+            builder.setAuditHostAndPorts(auditHostAndPorts);
             config.getBulkFlushBackoffType().ifPresent(builder::setBulkFlushBackoffType);
             config.getBulkFlushBackoffRetries().ifPresent(builder::setBulkFlushBackoffRetries);
             config.getBulkFlushBackoffDelay().ifPresent(builder::setBulkFlushBackoffDelay);
-
             // we must overwrite the default factory which is defined with a lambda because of a bug
             // in shading lambda serialization shading see FLINK-18006
             if (config.getUsername().isPresent()
@@ -164,13 +162,10 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
                 builder.setRestClientFactory(
                         new DefaultRestClientFactory(config.getPathPrefix().orElse(null)));
             }
-
             final ElasticsearchSink<RowData> sink = builder.build();
-
             if (config.isDisableFlushOnCheckpoint()) {
                 sink.disableFlushOnCheckpoint();
             }
-
             return sink;
         };
     }
@@ -198,12 +193,12 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
                 && Objects.equals(schema, that.schema)
                 && Objects.equals(config, that.config)
                 && Objects.equals(builderProvider, that.builderProvider)
-                && Objects.equals(inLongMetric, that.inLongMetric);
+                && Objects.equals(inlongMetric, that.inlongMetric);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(format, schema, config, builderProvider, inLongMetric);
+        return Objects.hash(format, schema, config, builderProvider, inlongMetric);
     }
 
     @FunctionalInterface
@@ -279,9 +274,8 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
                         AuthScope.ANY, new UsernamePasswordCredentials(username, password));
             }
             restClientBuilder.setHttpClientConfigCallback(
-                    httpAsyncClientBuilder ->
-                            httpAsyncClientBuilder.setDefaultCredentialsProvider(
-                                    credentialsProvider));
+                    httpAsyncClientBuilder -> httpAsyncClientBuilder.setDefaultCredentialsProvider(
+                            credentialsProvider));
         }
 
         @Override
@@ -308,33 +302,27 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
      * Version-specific creation of {@link org.elasticsearch.action.ActionRequest}s used by the
      * sink.
      */
-    private static class Elasticsearch6RequestFactory implements RequestFactory {
+    private static class Elasticsearch6RequestFactory implements RequestFactory<DocWriteRequest<?>, XContentType> {
+
+        private static final long serialVersionUID = 1L;
 
         @Override
-        public UpdateRequest createUpdateRequest(
-                String index,
-                String docType,
-                String key,
-                XContentType contentType,
-                byte[] document) {
+        public DocWriteRequest<?> createDeleteRequest(String index, String docType, String key) {
+            return new DeleteRequest(index, docType, key);
+        }
+
+        @Override
+        public DocWriteRequest<?> createUpdateRequest(String index, String docType, String key,
+                XContentType contentType, byte[] document) {
             return new UpdateRequest(index, docType, key)
                     .doc(document, contentType)
                     .upsert(document, contentType);
         }
 
         @Override
-        public IndexRequest createIndexRequest(
-                String index,
-                String docType,
-                String key,
-                XContentType contentType,
-                byte[] document) {
+        public DocWriteRequest<?> createIndexRequest(String index, String docType, String key,
+                XContentType contentType, byte[] document) {
             return new IndexRequest(index, docType, key).source(document, contentType);
-        }
-
-        @Override
-        public DeleteRequest createDeleteRequest(String index, String docType, String key) {
-            return new DeleteRequest(index, docType, key);
         }
     }
 }

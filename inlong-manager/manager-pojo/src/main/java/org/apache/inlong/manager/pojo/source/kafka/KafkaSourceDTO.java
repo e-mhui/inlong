@@ -17,8 +17,6 @@
 
 package org.apache.inlong.manager.pojo.source.kafka;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,6 +24,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
+import org.apache.inlong.manager.common.util.JsonUtils;
 
 import javax.validation.constraints.NotNull;
 import java.util.Map;
@@ -39,8 +38,6 @@ import java.util.Map;
 @NoArgsConstructor
 public class KafkaSourceDTO {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     @ApiModelProperty("Kafka topic")
     private String topic;
 
@@ -50,26 +47,25 @@ public class KafkaSourceDTO {
     @ApiModelProperty("Kafka servers address, such as: 127.0.0.1:9092")
     private String bootstrapServers;
 
-    @ApiModelProperty(value = "Limit the amount of data read per second",
-            notes = "Greater than or equal to 0, equal to zero means no limit")
+    @ApiModelProperty(value = "Limit the amount of data read per second", notes = "Greater than or equal to 0, equal to zero means no limit")
     private String recordSpeedLimit;
 
-    @ApiModelProperty(value = "Limit the number of bytes read per second",
-            notes = "Greater than or equal to 0, equal to zero means no limit")
+    @ApiModelProperty(value = "Limit the number of bytes read per second", notes = "Greater than or equal to 0, equal to zero means no limit")
     private String byteSpeedLimit;
 
-    @ApiModelProperty(value = "Topic partition offset",
-            notes = "For example,'partition:0,offset:42;partition:1,offset:300' "
-                    + "indicates offset 42 for partition 0 and offset 300 for partition 1.")
+    @ApiModelProperty(value = "Topic partition offset", notes = "For example,'partition:0,offset:42;partition:1,offset:300' "
+            + "indicates offset 42 for partition 0 and offset 300 for partition 1.")
     private String partitionOffsets;
+
+    @ApiModelProperty(value = "timestamp is millis")
+    private String timestampMillis;
 
     /**
      * The strategy of auto offset reset.
      *
      * @see <a href="https://docs.confluent.io/platform/current/clients/consumer.html">Kafka_consumer_config</a>
      */
-    @ApiModelProperty(value = "The strategy of auto offset reset",
-            notes = "including earliest, latest (the default), none")
+    @ApiModelProperty(value = "The strategy of auto offset reset", notes = "including earliest, latest (the default), none")
     private String autoOffsetReset;
 
     @ApiModelProperty("Data Serialization, support: json, canal, avro, etc")
@@ -90,6 +86,15 @@ public class KafkaSourceDTO {
     @ApiModelProperty("Field needed when serializationType is csv,json,avro")
     private String primaryKey;
 
+    @ApiModelProperty(value = "Data encoding format: UTF-8, GBK")
+    private String dataEncoding;
+
+    @ApiModelProperty(value = "Data separator")
+    private String dataSeparator;
+
+    @ApiModelProperty(value = "Data field escape symbol")
+    private String dataEscapeChar;
+
     @ApiModelProperty("Properties for Kafka")
     private Map<String, Object> properties;
 
@@ -104,6 +109,7 @@ public class KafkaSourceDTO {
                 .recordSpeedLimit(request.getRecordSpeedLimit())
                 .byteSpeedLimit(request.getByteSpeedLimit())
                 .partitionOffsets(request.getPartitionOffsets())
+                .timestampMillis(request.getTimestampMillis())
                 .autoOffsetReset(request.getAutoOffsetReset())
                 .serializationType(request.getSerializationType())
                 .databasePattern(request.getDatabasePattern())
@@ -117,10 +123,10 @@ public class KafkaSourceDTO {
 
     public static KafkaSourceDTO getFromJson(@NotNull String extParams) {
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, KafkaSourceDTO.class);
+            return JsonUtils.parseObject(extParams, KafkaSourceDTO.class);
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.SOURCE_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SOURCE_INFO_INCORRECT,
+                    String.format("parse extParams of KafkaSource failure: %s", e.getMessage()));
         }
     }
 }

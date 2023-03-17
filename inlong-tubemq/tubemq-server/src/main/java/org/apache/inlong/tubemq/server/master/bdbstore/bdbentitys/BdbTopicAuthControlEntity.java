@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -35,8 +35,8 @@ public class BdbTopicAuthControlEntity implements Serializable {
     private String topicName;
     private int enableAuthControl = -1; // -1 : undefine; 0: disable, 1: enable
     // ** Based on the data compatibility consideration of the original version:
-    //     the creation information in this example is the last modified information,
-    //     and the modified information is the creation information
+    // the creation information in this example is the last modified information,
+    // and the modified information is the creation information
     private String createUser;
     private Date createDate;
     private String attributes;
@@ -46,7 +46,7 @@ public class BdbTopicAuthControlEntity implements Serializable {
     }
 
     public BdbTopicAuthControlEntity(String topicName, boolean enableAuthControl,
-                                     String modifyUser, Date modifyDate) {
+            String modifyUser, Date modifyDate) {
         this.topicName = topicName;
         if (enableAuthControl) {
             this.enableAuthControl = 1;
@@ -58,7 +58,7 @@ public class BdbTopicAuthControlEntity implements Serializable {
     }
 
     public BdbTopicAuthControlEntity(String topicName, boolean enableAuthControl,
-                                     String attributes,  String modifyUser, Date modifyDate) {
+            String attributes, String modifyUser, Date modifyDate) {
         this.topicName = topicName;
         if (enableAuthControl) {
             this.enableAuthControl = 1;
@@ -176,14 +176,21 @@ public class BdbTopicAuthControlEntity implements Serializable {
     }
 
     public String getCreateUser() {
-        return TStringUtils.getAttrValFrmAttributes(
+        String tmpCreateUser = TStringUtils.getAttrValFrmAttributes(
                 this.attributes, TStoreConstants.TOKEN_CREATE_USER);
+        if (TStringUtils.isEmpty(tmpCreateUser)) {
+            tmpCreateUser = this.createUser;
+        }
+        return tmpCreateUser;
     }
 
     public Date getCreateDate() {
         String dateStr = TStringUtils.getAttrValFrmAttributes(
                 this.attributes, TStoreConstants.TOKEN_CREATE_DATE);
-        return DateTimeConvertUtils.yyyyMMddHHmmss2date(dateStr);
+        if (TStringUtils.isNotEmpty(dateStr)) {
+            return DateTimeConvertUtils.yyyyMMddHHmmss2date(dateStr);
+        }
+        return this.createDate;
     }
 
     public String getStrModifyDate() {
@@ -191,8 +198,12 @@ public class BdbTopicAuthControlEntity implements Serializable {
     }
 
     public String getStrCreateDate() {
-        return TStringUtils.getAttrValFrmAttributes(
+        String dateStr = TStringUtils.getAttrValFrmAttributes(
                 this.attributes, TStoreConstants.TOKEN_CREATE_DATE);
+        if (TStringUtils.isEmpty(dateStr)) {
+            dateStr = DateTimeConvertUtils.date2yyyyMMddHHmmss(createDate);
+        }
+        return dateStr;
     }
 
     public StringBuilder toJsonString(final StringBuilder sBuilder) {
@@ -201,7 +212,7 @@ public class BdbTopicAuthControlEntity implements Serializable {
                 .append("\",\"enableAuthControl\":\"").append(enableAuthControl)
                 .append("\",\"createUser\":\"").append(getCreateUser())
                 .append("\",\"createDate\":\"").append(getStrCreateDate())
-                .append("\",\"modifyUser\":\"").append(createUser)
+                .append("\",\"modifyUser\":\"").append(getModifyUser())
                 .append("\",\"modifyDate\":\"").append(getStrModifyDate())
                 .append("\",\"attributes\":\"").append(attributes).append("\"}");
     }
@@ -212,8 +223,8 @@ public class BdbTopicAuthControlEntity implements Serializable {
                 .append("topicName", topicName)
                 .append("enableAuthControl", enableAuthControl)
                 .append("createUser", getCreateUser())
-                .append("createDate", getCreateUser())
-                .append("modifyUser", createUser)
+                .append("createDate", getStrCreateDate())
+                .append("modifyUser", getModifyUser())
                 .append("modifyDate", getStrModifyDate())
                 .append("attributes", attributes)
                 .toString();

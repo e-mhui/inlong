@@ -17,7 +17,6 @@
 
 package org.apache.inlong.manager.client.api;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.inlong.manager.client.api.impl.InlongClientImpl;
 import org.apache.inlong.manager.pojo.cluster.BindTagRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterInfo;
@@ -28,9 +27,11 @@ import org.apache.inlong.manager.pojo.cluster.ClusterRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagPageRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagResponse;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.group.InlongGroupStatusInfo;
 
+import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
 
@@ -104,6 +105,16 @@ public interface InlongClient {
     Map<String, InlongGroupStatusInfo> listGroupStatus(List<String> groupIds) throws Exception;
 
     /**
+     * List group status
+     *
+     * @param groupIds inlong group id list
+     * @param credentials auth info to query sort task such as sort cluster token
+     * @return map of inlong group status list
+     * @throws Exception the exception
+     */
+    Map<String, InlongGroupStatusInfo> listGroupStatus(List<String> groupIds, String credentials) throws Exception;
+
+    /**
      * Gets group.
      *
      * @param groupName the group name
@@ -134,7 +145,7 @@ public interface InlongClient {
      * @param request page request conditions
      * @return cluster tag list
      */
-    PageInfo<ClusterTagResponse> listTag(ClusterTagPageRequest request);
+    PageResult<ClusterTagResponse> listTag(ClusterTagPageRequest request);
 
     /**
      * Update cluster tag.
@@ -174,7 +185,7 @@ public interface InlongClient {
      * @param request query conditions
      * @return cluster list
      */
-    ClusterInfo list(ClusterPageRequest request);
+    PageResult<ClusterInfo> list(ClusterPageRequest request);
 
     /**
      * Update cluster information.
@@ -222,7 +233,17 @@ public interface InlongClient {
      * @param request page request conditions
      * @return cluster node list
      */
-    PageInfo<ClusterNodeResponse> listNode(ClusterPageRequest request);
+    PageResult<ClusterNodeResponse> listNode(ClusterPageRequest request);
+
+    /**
+     * List cluster nodes
+     *
+     * @param inlongGroupId inlong group id
+     * @param clusterType cluster type
+     * @param protocolType protocol type, such as: TCP, HTTP
+     * @return cluster node list
+     */
+    List<ClusterNodeResponse> listNode(String inlongGroupId, String clusterType, @Nullable String protocolType);
 
     /**
      * Update cluster node.

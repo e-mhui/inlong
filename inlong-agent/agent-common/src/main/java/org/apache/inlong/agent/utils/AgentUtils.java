@@ -27,36 +27,29 @@ import org.slf4j.LoggerFactory;
 import java.io.Closeable;
 import java.io.File;
 import java.io.InputStream;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.apache.inlong.agent.constant.AgentConstants.AGENT_ENABLE_OOM_EXIT;
 import static org.apache.inlong.agent.constant.AgentConstants.AGENT_LOCAL_IP;
 import static org.apache.inlong.agent.constant.AgentConstants.AGENT_LOCAL_UUID;
 import static org.apache.inlong.agent.constant.AgentConstants.AGENT_LOCAL_UUID_OPEN;
+import static org.apache.inlong.agent.constant.AgentConstants.CUSTOM_FIXED_IP;
 import static org.apache.inlong.agent.constant.AgentConstants.DEFAULT_AGENT_LOCAL_UUID_OPEN;
 import static org.apache.inlong.agent.constant.AgentConstants.DEFAULT_ENABLE_OOM_EXIT;
+import static org.apache.inlong.agent.constant.AgentConstants.DEFAULT_LOCAL_HOST;
 import static org.apache.inlong.agent.constant.AgentConstants.DEFAULT_LOCAL_IP;
 
 /**
@@ -76,7 +69,6 @@ public class AgentUtils {
     public static final String HOUR_LOW_CASE = "h";
     public static final String MINUTE = "m";
     private static final Logger LOGGER = LoggerFactory.getLogger(AgentUtils.class);
-    private static final String HEX_PREFIX = "0x";
 
     /**
      * Get MD5 of file.
@@ -85,7 +77,7 @@ public class AgentUtils {
         try (InputStream is = Files.newInputStream(Paths.get(file.getAbsolutePath()))) {
             return DigestUtils.md5Hex(is);
         } catch (Exception ex) {
-            LOGGER.warn("cannot get md5 of {}", file, ex);
+            LOGGER.warn("cannot get md5 of file: " + file, ex);
         }
         return "";
     }
@@ -107,7 +99,7 @@ public class AgentUtils {
             try {
                 resource.close();
             } catch (Exception ex) {
-                LOGGER.info("error while closing", ex);
+                LOGGER.info("error while closing: " + resource, ex);
             }
         }
     }
@@ -122,37 +114,9 @@ public class AgentUtils {
             try {
                 resource.close();
             } catch (Exception ex) {
-                LOGGER.error("error while closing", ex);
+                LOGGER.info("error while closing: " + resource, ex);
             }
         }
-    }
-
-    /**
-     * Get declare fields.
-     */
-    public static List<Field> getDeclaredFieldsIncludingInherited(Class<?> clazz) {
-        List<Field> fields = new ArrayList<Field>();
-        // check whether parent exists
-        while (clazz != null) {
-            fields.addAll(Arrays.asList(clazz.getDeclaredFields()));
-            clazz = clazz.getSuperclass();
-        }
-        return fields;
-    }
-
-    /**
-     * Get declare methods.
-     *
-     * @param clazz class of field from method return
-     * @return list of methods
-     */
-    public static List<Method> getDeclaredMethodsIncludingInherited(Class<?> clazz) {
-        List<Method> methods = new ArrayList<>();
-        while (clazz != null) {
-            methods.addAll(Arrays.asList(clazz.getDeclaredMethods()));
-            clazz = clazz.getSuperclass();
-        }
-        return methods;
     }
 
     /**
@@ -174,6 +138,19 @@ public class AgentUtils {
             LOGGER.error("error while get local ip", ex);
         }
         return ip;
+    }
+
+    /**
+     * Get local host
+     */
+    public static String getLocalHost() {
+        String host = DEFAULT_LOCAL_HOST;
+        try {
+            host = InetAddress.getLocalHost().getHostName();
+        } catch (Exception ex) {
+            LOGGER.error("error while get local host", ex);
+        }
+        return host;
     }
 
     /**
@@ -211,29 +188,18 @@ public class AgentUtils {
         try {
             TimeUnit.MILLISECONDS.sleep(millisecond);
         } catch (Exception e) {
-            LOGGER.warn("silenceSleepInMs: ", e);
+            LOGGER.warn("error in silence sleep: ", e);
         }
     }
 
     /**
-     * Sleep minutes
+     * Sleep seconds
      */
-    public static void silenceSleepInMinute(long minutes) {
+    public static void silenceSleepInSeconds(long seconds) {
         try {
-            TimeUnit.MINUTES.sleep(minutes);
+            TimeUnit.SECONDS.sleep(seconds);
         } catch (Exception e) {
-            LOGGER.warn("silenceSleepInMs: ", e);
-        }
-    }
-
-    public static String parseHexStr(String delimiter) throws IllegalArgumentException {
-        if (delimiter.trim().toLowerCase().startsWith(HEX_PREFIX)) {
-            // only one char
-            byte[] byteArr = new byte[1];
-            byteArr[0] = Byte.decode(delimiter.trim());
-            return new String(byteArr, StandardCharsets.UTF_8);
-        } else {
-            throw new IllegalArgumentException("delimiter not start with " + HEX_PREFIX);
+            LOGGER.warn("error in silence sleep: ", e);
         }
     }
 
@@ -270,29 +236,6 @@ public class AgentUtils {
     public static String formatCurrentTimeWithoutOffset(String formatter) {
         ZonedDateTime zoned = ZonedDateTime.now().plusDays(0).plusHours(0).plusMinutes(0);
         return DateTimeFormatter.ofPattern(formatter).withLocale(Locale.getDefault()).format(zoned);
-    }
-
-    /**
-     * Whether all class of path name are matched
-     *
-     * @param pathStr path string
-     * @param patternStr regex pattern
-     * @return true if all match
-     */
-    public static boolean regexMatch(String pathStr, String patternStr) {
-        String[] pathNames = StringUtils.split(pathStr, FileSystems.getDefault().getSeparator());
-        String[] patternNames = StringUtils
-                .split(patternStr, FileSystems.getDefault().getSeparator());
-        for (int i = 0; i < pathNames.length && i < patternNames.length; i++) {
-            if (!pathNames[i].equals(patternNames[i])) {
-                Matcher matcher = Pattern.compile(patternNames[i]).matcher(pathNames[i]);
-                if (!matcher.matches()) {
-                    return false;
-                }
-            }
-        }
-        LOGGER.info("path name:{} , pattern name:{}", Arrays.toString(pathNames), Arrays.toString(patternNames));
-        return true;
     }
 
     /**
@@ -348,6 +291,9 @@ public class AgentUtils {
      * Check agent ip from manager
      */
     public static String fetchLocalIp() {
+        if (StringUtils.isNoneBlank(AgentConfiguration.getAgentConf().get(CUSTOM_FIXED_IP, null))) {
+            return AgentConfiguration.getAgentConf().get(CUSTOM_FIXED_IP);
+        }
         return AgentConfiguration.getAgentConf().get(AGENT_LOCAL_IP, getLocalIp());
     }
 
@@ -356,8 +302,7 @@ public class AgentUtils {
      */
     public static String fetchLocalUuid() {
         String uuid = "";
-        if (!AgentConfiguration.getAgentConf()
-                .getBoolean(AGENT_LOCAL_UUID_OPEN, DEFAULT_AGENT_LOCAL_UUID_OPEN)) {
+        if (!AgentConfiguration.getAgentConf().getBoolean(AGENT_LOCAL_UUID_OPEN, DEFAULT_AGENT_LOCAL_UUID_OPEN)) {
             return uuid;
         }
         try {
@@ -373,7 +318,7 @@ public class AgentUtils {
                 return uuid;
             }
         } catch (Exception e) {
-            LOGGER.error("fetch uuid  error", e);
+            LOGGER.error("fetch uuid error", e);
         }
         return uuid;
     }
@@ -442,5 +387,4 @@ public class AgentUtils {
     public static boolean enableOOMExit() {
         return AgentConfiguration.getAgentConf().getBoolean(AGENT_ENABLE_OOM_EXIT, DEFAULT_ENABLE_OOM_EXIT);
     }
-
 }

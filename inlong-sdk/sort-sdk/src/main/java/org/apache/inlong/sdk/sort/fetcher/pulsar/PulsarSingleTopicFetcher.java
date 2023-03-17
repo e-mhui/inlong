@@ -13,7 +13,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.apache.inlong.sdk.sort.fetcher.pulsar;
@@ -52,6 +51,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * Pulsar single topic fetcher.
  */
 public class PulsarSingleTopicFetcher extends SingleTopicFetcher {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(PulsarSingleTopicFetcher.class);
     private final ReentrantReadWriteLock mainLock = new ReentrantReadWriteLock(true);
     private final ConcurrentHashMap<String, MessageId> offsetCache = new ConcurrentHashMap<>();
@@ -85,7 +85,7 @@ public class PulsarSingleTopicFetcher extends SingleTopicFetcher {
 
     private void ackSucc(String offset) {
         offsetCache.remove(offset);
-        context.getStateCounterByTopic(topic).addAckSuccTimes(1L);
+        context.addAckSuccess(topic, -1);
     }
 
     /**
@@ -98,26 +98,26 @@ public class PulsarSingleTopicFetcher extends SingleTopicFetcher {
         if (!StringUtils.isEmpty(msgOffset)) {
             try {
                 if (consumer == null) {
-                    context.getStateCounterByTopic(topic).addAckFailTimes(1L);
+                    context.addAckFail(topic, -1);
                     LOGGER.error("consumer == null {}", topic);
                     return;
                 }
                 MessageId messageId = offsetCache.get(msgOffset);
                 if (messageId == null) {
-                    context.getStateCounterByTopic(topic).addAckFailTimes(1L);
+                    context.addAckFail(topic, -1);
                     LOGGER.error("messageId == null {}", topic);
                     return;
                 }
                 consumer.acknowledgeAsync(messageId)
                         .thenAccept(consumer -> ackSucc(msgOffset))
                         .exceptionally(exception -> {
-                            LOGGER.error("ack fail:{} {},error:{}",
-                                    topic, msgOffset, exception.getMessage(), exception);
-                            context.getStateCounterByTopic(topic).addAckFailTimes(1L);
+                            LOGGER.error("ack fail:{} {}",
+                                    topic, msgOffset, exception);
+                            context.addAckFail(topic, -1);
                             return null;
                         });
             } catch (Exception e) {
-                context.getStateCounterByTopic(topic).addAckFailTimes(1L);
+                context.addAckFail(topic, -1);
                 LOGGER.error(e.getMessage(), e);
                 throw e;
             }
@@ -162,9 +162,10 @@ public class PulsarSingleTopicFetcher extends SingleTopicFetcher {
             String threadName = String.format("sort_sdk_pulsar_single_topic_fetch_thread_%s_%s_%d",
                     this.topic.getInLongCluster().getClusterId(), topic.getTopic(), this.hashCode());
             this.fetchThread = new Thread(new PulsarSingleTopicFetcher.Fetcher(), threadName);
+            this.fetchThread.setDaemon(true);
             this.fetchThread.start();
         } catch (Exception e) {
-            LOGGER.error(e.getMessage(), e);
+            LOGGER.error("fail to create consumer", e);
             return false;
         }
         return true;
@@ -203,9 +204,6 @@ public class PulsarSingleTopicFetcher extends SingleTopicFetcher {
                 if (consumer != null) {
                     consumer.close();
                 }
-                if (fetchThread != null) {
-                    fetchThread.interrupt();
-                }
             } catch (PulsarClientException e) {
                 LOGGER.warn(e.getMessage(), e);
             }
@@ -232,13 +230,14 @@ public class PulsarSingleTopicFetcher extends SingleTopicFetcher {
         private void handleAndCallbackMsg(List<MessageRecord> messageRecords) {
             long start = System.currentTimeMillis();
             try {
-                context.getStateCounterByTopic(topic).addCallbackTimes(1L);
+                context.addCallBack(topic, -1);
                 context.getConfig().getCallback().onFinishedBatch(messageRecords);
-                context.getStateCounterByTopic(topic)
-                        .addCallbackTimeCost(System.currentTimeMillis() - start).addCallbackDoneTimes(1L);
+                context.addCallBackSuccess(topic, -1, messageRecords.size(),
+                        System.currentTimeMillis() - start);
             } catch (Exception e) {
-                context.getStateCounterByTopic(topic).addCallbackErrorTimes(1L);
-                LOGGER.error("failed to callback {}", e.getMessage(), e);
+                context.addCallBackFail(topic, -1, messageRecords.size(),
+                        System.currentTimeMillis() - start);
+                LOGGER.error("failed to callback", e);
             }
         }
 
@@ -250,74 +249,82 @@ public class PulsarSingleTopicFetcher extends SingleTopicFetcher {
         public void run() {
             boolean hasPermit;
             while (true) {
-                hasPermit = false;
                 try {
-                    if (context.getConfig().isStopConsume() || stopConsume) {
-                        TimeUnit.MILLISECONDS.sleep(50);
-                        continue;
-                    }
-
-                    if (sleepTime > 0) {
-                        TimeUnit.MILLISECONDS.sleep(sleepTime);
-                    }
-
-                    context.acquireRequestPermit();
-                    hasPermit = true;
-                    context.getStateCounterByTopic(topic).addMsgCount(1L).addFetchTimes(1L);
-
-                    long startFetchTime = System.currentTimeMillis();
-                    Messages<byte[]> messages = consumer.batchReceive();
-
-                    context.getStateCounterByTopic(topic).addFetchTimeCost(System.currentTimeMillis() - startFetchTime);
-                    if (null != messages && messages.size() != 0) {
-                        List<MessageRecord> msgs = new ArrayList<>();
-                        for (Message<byte[]> msg : messages) {
-                            // if need seek
-                            if (msg.getPublishTime() < seeker.getSeekTime()) {
-                                seeker.seek();
-                                break;
-                            }
-                            String offsetKey = getOffset(msg.getMessageId());
-                            offsetCache.put(offsetKey, msg.getMessageId());
-
-                            //deserialize
-                            List<InLongMessage> inLongMessages = deserializer
-                                    .deserialize(context, topic, msg.getProperties(), msg.getData());
-                            // intercept
-                            inLongMessages = interceptor.intercept(inLongMessages);
-                            if (inLongMessages.isEmpty()) {
-                                ack(offsetKey);
-                                continue;
-                            }
-
-                            msgs.add(new MessageRecord(topic.getTopicKey(),
-                                    inLongMessages,
-                                    offsetKey, System.currentTimeMillis()));
-                            context.getStateCounterByTopic(topic).addConsumeSize(msg.getData().length);
+                    hasPermit = false;
+                    long fetchTimeCost = -1;
+                    try {
+                        if (context.getConfig().isStopConsume() || stopConsume) {
+                            TimeUnit.MILLISECONDS.sleep(50);
+                            continue;
                         }
-                        context.getStateCounterByTopic(topic).addMsgCount(msgs.size());
-                        handleAndCallbackMsg(msgs);
-                        sleepTime = 0L;
-                    } else {
-                        context.getStateCounterByTopic(topic).addEmptyFetchTimes(1L);
-                        emptyFetchTimes++;
-                        if (emptyFetchTimes >= context.getConfig().getEmptyPollTimes()) {
-                            sleepTime = Math.min((sleepTime += context.getConfig().getEmptyPollSleepStepMs()),
-                                    context.getConfig().getMaxEmptyPollSleepMs());
-                            emptyFetchTimes = 0;
+
+                        if (sleepTime > 0) {
+                            TimeUnit.MILLISECONDS.sleep(sleepTime);
+                        }
+
+                        context.acquireRequestPermit();
+                        hasPermit = true;
+                        context.addConsumeTime(topic, -1);
+
+                        long startFetchTime = System.currentTimeMillis();
+                        Messages<byte[]> messages = consumer.batchReceive();
+                        fetchTimeCost = System.currentTimeMillis() - startFetchTime;
+                        if (null != messages && messages.size() != 0) {
+                            for (Message<byte[]> msg : messages) {
+                                // if need seek
+                                if (msg.getPublishTime() < seeker.getSeekTime()) {
+                                    seeker.seek();
+                                    break;
+                                }
+
+                                String offsetKey = getOffset(msg.getMessageId());
+                                offsetCache.put(offsetKey, msg.getMessageId());
+
+                                // deserialize
+                                List<InLongMessage> inLongMessages = deserializer
+                                        .deserialize(context, topic, msg.getProperties(), msg.getData());
+                                context.addConsumeSuccess(topic, -1, inLongMessages.size(), msg.getData().length,
+                                        fetchTimeCost);
+                                int originSize = inLongMessages.size();
+                                // intercept
+                                inLongMessages = interceptor.intercept(inLongMessages);
+                                if (inLongMessages.isEmpty()) {
+                                    ack(offsetKey);
+                                    continue;
+                                }
+                                int filterSize = originSize - inLongMessages.size();
+                                context.addConsumeFilter(topic, -1, filterSize);
+
+                                List<MessageRecord> msgs = new ArrayList<>();
+                                msgs.add(new MessageRecord(topic.getTopicKey(),
+                                        inLongMessages,
+                                        offsetKey, System.currentTimeMillis()));
+                                handleAndCallbackMsg(msgs);
+                            }
+                            sleepTime = 0L;
+                        } else {
+                            context.addConsumeEmpty(topic, -1, fetchTimeCost);
+                            emptyFetchTimes++;
+                            if (emptyFetchTimes >= context.getConfig().getEmptyPollTimes()) {
+                                sleepTime = Math.min((sleepTime += context.getConfig().getEmptyPollSleepStepMs()),
+                                        context.getConfig().getMaxEmptyPollSleepMs());
+                                emptyFetchTimes = 0;
+                            }
+                        }
+                    } catch (Exception e) {
+                        context.addConsumeError(topic, -1, fetchTimeCost);
+                        LOGGER.error("failed to fetch msg", e);
+                    } finally {
+                        if (hasPermit) {
+                            context.releaseRequestPermit();
                         }
                     }
-                } catch (Exception e) {
-                    context.getStateCounterByTopic(topic).addFetchErrorTimes(1L);
-                    LOGGER.error("failed to fetch msg: {}", e.getMessage(), e);
-                } finally {
-                    if (hasPermit) {
-                        context.releaseRequestPermit();
-                    }
-                }
 
-                if (closed) {
-                    break;
+                    if (closed) {
+                        break;
+                    }
+                } catch (Throwable t) {
+                    LOGGER.error("got exception while process fetching", t);
                 }
             }
         }

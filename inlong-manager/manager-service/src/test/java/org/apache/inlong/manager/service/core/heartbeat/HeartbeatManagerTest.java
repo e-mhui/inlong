@@ -20,6 +20,7 @@ package org.apache.inlong.manager.service.core.heartbeat;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.inlong.common.enums.ComponentTypeEnum;
 import org.apache.inlong.common.heartbeat.HeartbeatMsg;
+import org.apache.inlong.common.constant.ProtocolType;
 import org.apache.inlong.manager.common.enums.NodeStatus;
 import org.apache.inlong.manager.common.util.JsonUtils;
 import org.apache.inlong.manager.dao.entity.InlongClusterEntity;
@@ -28,6 +29,7 @@ import org.apache.inlong.manager.dao.mapper.InlongClusterEntityMapper;
 import org.apache.inlong.manager.dao.mapper.InlongClusterNodeEntityMapper;
 import org.apache.inlong.manager.pojo.cluster.ClusterNodeRequest;
 import org.apache.inlong.manager.service.ServiceBaseTest;
+import org.apache.inlong.manager.service.heartbeat.HeartbeatManager;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,7 +64,9 @@ public class HeartbeatManagerTest extends ServiceBaseTest {
         nodeRequest.setParentId(clusterId);
         nodeRequest.setType(msg.getComponentType());
         nodeRequest.setIp(msg.getIp());
-        nodeRequest.setPort(msg.getPort());
+        nodeRequest.setPort(Integer.valueOf(msg.getPort()));
+        nodeRequest.setProtocolType(ProtocolType.HTTP);
+        nodeRequest.setNodeLoad(0xFFFF);
         InlongClusterNodeEntity clusterNode = clusterNodeMapper.selectByUniqueKey(nodeRequest);
         Assertions.assertNotNull(clusterNode);
         Assertions.assertEquals((int) clusterNode.getStatus(), NodeStatus.NORMAL.getStatus());
@@ -82,8 +86,10 @@ public class HeartbeatManagerTest extends ServiceBaseTest {
     private HeartbeatMsg createHeartbeatMsg() {
         HeartbeatMsg heartbeatMsg = new HeartbeatMsg();
         heartbeatMsg.setIp("127.0.0.1");
-        heartbeatMsg.setPort(8008);
-        heartbeatMsg.setComponentType(ComponentTypeEnum.Agent.getName());
+        heartbeatMsg.setPort("46802");
+        heartbeatMsg.setClusterTag("default_cluster");
+        heartbeatMsg.setProtocolType(ProtocolType.HTTP);
+        heartbeatMsg.setComponentType(ComponentTypeEnum.DataProxy.getType());
         heartbeatMsg.setReportTime(System.currentTimeMillis());
         return heartbeatMsg;
     }

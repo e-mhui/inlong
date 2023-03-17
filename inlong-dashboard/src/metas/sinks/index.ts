@@ -17,95 +17,13 @@
  * under the License.
  */
 
-import type { GetStorageFormFieldsType, GetStorageColumnsType } from '@/utils/metaData';
-import type { ColumnsType } from 'antd/es/table';
-import { hive } from './hive';
-import { clickhouse } from './clickhouse';
-import { kafka } from './kafka';
-import { iceberg } from './iceberg';
-import { es } from './es';
-import { greenplum } from './greenplum';
-import { mysql } from './mysql';
-import { oracle } from './oracle';
-import { postgreSql } from './postgreSql';
-import { sqlServer } from './sqlServer';
-import { tdsqlPostgreSQL } from './tdsqlPostgreSql';
-import { hbase } from './hbase';
+import { sinkLoader } from '@/loaders';
+import { allDefaultSinks } from './defaults';
+import { allExtendsSinks } from './extends';
+import type { SinkMetaType } from './types';
 
-export interface SinkType {
-  label: string;
-  value: string;
-  // Generate form configuration for single data
-  getForm: GetStorageFormFieldsType;
-  // Generate table display configuration
-  tableColumns: ColumnsType;
-  // Detailed mapping data field configuration for this type of flow
-  getFieldListColumns?: GetStorageColumnsType;
-  // Custom convert interface data to front-end data format
-  toFormValues?: (values: unknown) => unknown;
-  // Custom convert front-end data to interface data format
-  toSubmitValues?: (values: unknown) => unknown;
-}
+export type { SinkMetaType };
 
-export const Sinks: SinkType[] = [
-  {
-    label: 'Hive',
-    value: 'HIVE',
-    ...hive,
-  },
-  {
-    label: 'Iceberg',
-    value: 'ICEBERG',
-    ...iceberg,
-  },
-  {
-    label: 'ClickHouse',
-    value: 'CLICKHOUSE',
-    ...clickhouse,
-  },
-  {
-    label: 'Kafka',
-    value: 'KAFKA',
-    ...kafka,
-  },
-  {
-    label: 'Elasticsearch',
-    value: 'ELASTICSEARCH',
-    ...es,
-  },
-  {
-    label: 'Greenplum',
-    value: 'GREENPLUM',
-    ...greenplum,
-  },
-  {
-    label: 'HBase',
-    value: 'HBASE',
-    ...hbase,
-  },
-  {
-    label: 'MySQL',
-    value: 'MYSQL',
-    ...mysql,
-  },
-  {
-    label: 'Oracle',
-    value: 'ORACLE',
-    ...oracle,
-  },
-  {
-    label: 'PostgreSQL',
-    value: 'POSTGRES',
-    ...postgreSql,
-  },
-  {
-    label: 'SQLServer',
-    value: 'SQLSERVER',
-    ...sqlServer,
-  },
-  {
-    label: 'TDSQLPostgreSQL',
-    value: 'TDSQLPOSTGRESQL',
-    ...tdsqlPostgreSQL,
-  },
-];
+export const sinks = sinkLoader.loadPluginList<SinkMetaType>(allDefaultSinks, allExtendsSinks);
+
+export const defaultValue = sinkLoader.loadDefaultPlugin<SinkMetaType>(sinks);

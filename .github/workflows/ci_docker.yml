@@ -49,7 +49,7 @@ on:
 jobs:
   docker:
     name: Docker build and push
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -65,6 +65,13 @@ jobs:
         with:
           python-version: 3.7
 
+      - name: Set up QEMU dependency
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: Cache Maven packages
         uses: actions/cache@v3
         with:
@@ -73,6 +80,26 @@ jobs:
             !~/.m2/repository/org/apache/inlong
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
+
+      - name: Set up swapfile path
+        run: |
+          sudo sysctl -w vm.max_map_count=262144
+          sudo sysctl -w fs.file-max=65536
+          sudo fallocate -l 5G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
+      - name: Remove unnecessary packages
+        run: |
+          echo "=== Before pruning ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          echo
+          echo "=== After pruning ==="
+          df -h
 
       - name: Build Docker images
         run: mvn --batch-mode --update-snapshots -e -V clean package -DskipTests -Pdocker
@@ -87,12 +114,12 @@ jobs:
           && github.repository_owner == 'apache'
         run: |
           if [[ ${{ github.ref_name }} == ${{ github.event.repository.default_branch }} ]]; then
-            echo "::set-output name=match_master::true"
-          elif [[ ${{ github.ref_name }} =~ ^release-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::set-output name=match_release::true"
+            echo "match_master=true" >> $GITHUB_OUTPUT
+          elif [[ ${{ github.ref_name }} =~ ^branch-[0-9]+\.[0-9]+$ ]]; then
+            echo "match_release=true" >> $GITHUB_OUTPUT
           fi
 
-      # Publish x86 Docker images when the changes are being pushed to the master branch or a release branch like 'release-1.0.0'.
+      # Publish x86 Docker images when the changes are being pushed to the master branch or a release branch like 'branch-1.4'.
       - name: Push x86 Docker images to Docker Hub
         if: |
           steps.match.outputs.match_master == 'true'
@@ -105,7 +132,7 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
           DOCKER_ORG: inlong
 
-      # Publish aarch64 Docker images when the changes are being pushed to a release branch like 'release-1.0.0'.
+      # Publish aarch64 Docker images when the changes are being pushed to a release branch like 'branch-1.4'.
       - name: Push aarch64 Docker images to Docker Hub
         if: ${{ steps.match.outputs.match_release == 'true' }}
         working-directory: docker

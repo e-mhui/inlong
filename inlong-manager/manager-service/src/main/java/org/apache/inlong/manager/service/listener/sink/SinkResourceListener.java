@@ -20,16 +20,19 @@ package org.apache.inlong.manager.service.listener.sink;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.inlong.manager.common.consts.InlongConstants;
+import org.apache.inlong.manager.common.enums.GroupStatus;
+import org.apache.inlong.manager.common.enums.TaskEvent;
 import org.apache.inlong.manager.dao.mapper.StreamSinkEntityMapper;
 import org.apache.inlong.manager.pojo.sink.SinkInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamInfo;
 import org.apache.inlong.manager.pojo.workflow.form.process.GroupResourceProcessForm;
+import org.apache.inlong.manager.service.group.InlongGroupService;
 import org.apache.inlong.manager.service.resource.sink.SinkResourceOperator;
 import org.apache.inlong.manager.service.resource.sink.SinkResourceOperatorFactory;
+import org.apache.inlong.manager.service.stream.InlongStreamService;
 import org.apache.inlong.manager.workflow.WorkflowContext;
 import org.apache.inlong.manager.workflow.event.ListenerResult;
 import org.apache.inlong.manager.workflow.event.task.SinkOperateListener;
-import org.apache.inlong.manager.workflow.event.task.TaskEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -48,6 +51,10 @@ public class SinkResourceListener implements SinkOperateListener {
     @Autowired
     private StreamSinkEntityMapper sinkMapper;
     @Autowired
+    private InlongStreamService streamService;
+    @Autowired
+    private InlongGroupService groupService;
+    @Autowired
     private SinkResourceOperatorFactory sinkOperatorFactory;
 
     @Override
@@ -60,9 +67,9 @@ public class SinkResourceListener implements SinkOperateListener {
         GroupResourceProcessForm form = (GroupResourceProcessForm) context.getProcessForm();
         String groupId = form.getInlongGroupId();
         log.info("begin to create sink resources for groupId={}", groupId);
-
+        groupService.updateStatus(groupId, GroupStatus.CONFIG_ING.getCode(), context.getOperator());
         List<String> streamIdList = new ArrayList<>();
-        List<InlongStreamInfo> streamList = form.getStreamInfos();
+        List<InlongStreamInfo> streamList = streamService.list(groupId);
         if (CollectionUtils.isNotEmpty(streamList)) {
             streamIdList = streamList.stream().map(InlongStreamInfo::getInlongStreamId).collect(Collectors.toList());
         }

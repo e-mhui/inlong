@@ -17,7 +17,7 @@
 
 package org.apache.inlong.manager.client.api;
 
-import com.github.pagehelper.PageInfo;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.user.UserInfo;
 import org.apache.inlong.manager.pojo.user.UserRequest;
 
@@ -47,12 +47,20 @@ public interface User {
     UserInfo getById(Integer id);
 
     /**
+     * Get user info by username
+     *
+     * @param name username
+     * @return user info
+     */
+    UserInfo getByName(String name);
+
+    /**
      * List all users basic info by request condition
      *
      * @param request request
      * @return user info list
      */
-    PageInfo<UserInfo> list(UserRequest request);
+    PageResult<UserInfo> list(UserRequest request);
 
     /**
      * Update user info

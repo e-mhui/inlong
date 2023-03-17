@@ -24,21 +24,18 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
-
 /**
  * Interface class for data format
  */
-@JsonTypeInfo(
-        use = JsonTypeInfo.Id.NAME,
-        include = JsonTypeInfo.As.PROPERTY,
-        property = "type")
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
         @JsonSubTypes.Type(value = JsonFormat.class, name = "jsonFormat"),
         @JsonSubTypes.Type(value = AvroFormat.class, name = "avroFormat"),
         @JsonSubTypes.Type(value = DebeziumJsonFormat.class, name = "debeziumJsonFormat"),
         @JsonSubTypes.Type(value = CanalJsonFormat.class, name = "canalJsonFormat"),
         @JsonSubTypes.Type(value = CsvFormat.class, name = "csvFormat"),
-        @JsonSubTypes.Type(value = InLongMsgFormat.class, name = "inLongMsgFormat")
+        @JsonSubTypes.Type(value = InLongMsgFormat.class, name = "inLongMsgFormat"),
+        @JsonSubTypes.Type(value = RawFormat.class, name = "rawFormat")
 })
 public interface Format extends Serializable {
 
@@ -48,6 +45,13 @@ public interface Format extends Serializable {
      * @return format
      */
     String getFormat();
+
+    /**
+     * Return the identifier of this format
+     *
+     * @return The identifier of this format such as [json/avro/debezium-json/canal-json]
+     */
+    String identifier();
 
     /**
      * generate options for connector

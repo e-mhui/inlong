@@ -76,15 +76,21 @@ public interface Metadata {
         String metadataType;
         switch (metaField) {
             case TABLE_NAME:
-            case DATA:
             case DATABASE_NAME:
             case OP_TYPE:
+            case DATA_CANAL:
+            case DATA:
+            case DATA_DEBEZIUM:
             case COLLECTION_NAME:
             case SCHEMA_NAME:
+            case KEY:
+            case VALUE:
+            case HEADERS_TO_JSON_STR:
                 metadataType = "STRING";
                 break;
             case OP_TS:
             case TS:
+            case TIMESTAMP:
                 metadataType = "TIMESTAMP_LTZ(3)";
                 break;
             case IS_DDL:
@@ -96,14 +102,27 @@ public interface Metadata {
             case MYSQL_TYPE:
                 metadataType = "MAP<STRING, STRING>";
                 break;
+            case ORACLE_TYPE:
+                metadataType = "MAP<STRING, STRING>";
+                break;
             case PK_NAMES:
                 metadataType = "ARRAY<STRING>";
                 break;
+            case HEADERS:
+                metadataType = "MAP<STRING, BINARY>";
+                break;
             case BATCH_ID:
+            case PARTITION:
+            case OFFSET:
                 metadataType = "BIGINT";
                 break;
             case UPDATE_BEFORE:
                 metadataType = "ARRAY<MAP<STRING, STRING>>";
+                break;
+            case DATA_BYTES:
+            case DATA_BYTES_DEBEZIUM:
+            case DATA_BYTES_CANAL:
+                metadataType = "BYTES";
                 break;
             default:
                 throw new UnsupportedOperationException(String.format("Unsupport meta field for %s: %s",

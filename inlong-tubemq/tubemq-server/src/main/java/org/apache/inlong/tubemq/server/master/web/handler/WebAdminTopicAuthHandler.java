@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -26,8 +26,10 @@ import javax.servlet.http.HttpServletRequest;
 import org.apache.inlong.tubemq.corebase.TBaseConstants;
 import org.apache.inlong.tubemq.corebase.rv.ProcessResult;
 import org.apache.inlong.tubemq.server.common.fielddef.WebFieldDef;
+import org.apache.inlong.tubemq.server.common.statusdef.EnableStatus;
 import org.apache.inlong.tubemq.server.common.utils.WebParameterUtils;
 import org.apache.inlong.tubemq.server.master.TMaster;
+import org.apache.inlong.tubemq.server.master.metamanage.DataOpErrCode;
 import org.apache.inlong.tubemq.server.master.metamanage.metastore.dao.entity.BaseEntity;
 import org.apache.inlong.tubemq.server.master.metamanage.metastore.dao.entity.GroupConsumeCtrlEntity;
 import org.apache.inlong.tubemq.server.master.metamanage.metastore.dao.entity.TopicCtrlEntity;
@@ -62,8 +64,8 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
      * @return    process result
      */
     public StringBuilder adminQueryTopicAuthControl(HttpServletRequest req,
-                                                    StringBuilder sBuffer,
-                                                    ProcessResult result) {
+            StringBuilder sBuffer,
+            ProcessResult result) {
         TopicCtrlEntity qryEntity = new TopicCtrlEntity();
         // get queried operation info, for createUser, modifyUser, dataVersionId
         if (!WebParameterUtils.getQueriedOperateInfo(req, qryEntity, sBuffer, result)) {
@@ -91,6 +93,8 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
                     .append("\",\"isEnable\":").append(entity.isAuthCtrlEnable())
                     .append(",\"createUser\":\"").append(entity.getCreateUser())
                     .append("\",\"createDate\":\"").append(entity.getCreateDateStr())
+                    .append("\",\"modifyUser\":\"").append(entity.getModifyUser())
+                    .append("\",\"modifyDate\":\"").append(entity.getModifyDateStr())
                     .append("\",\"authConsumeGroup\":[");
             List<GroupConsumeCtrlEntity> groupEntity =
                     defMetaDataService.getConsumeCtrlByTopic(entity.getTopicName());
@@ -101,12 +105,11 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
                         sBuffer.append(",");
                     }
                     sBuffer.append("{\"topicName\":\"").append(itemEntity.getTopicName())
-                            .append("\",\"groupName\":\"")
-                            .append(itemEntity.getGroupName())
-                            .append("\",\"createUser\":\"")
-                            .append(itemEntity.getCreateUser())
-                            .append("\",\"createDate\":\"")
-                            .append(itemEntity.getCreateDateStr())
+                            .append("\",\"groupName\":\"").append(itemEntity.getGroupName())
+                            .append("\",\"createUser\":\"").append(itemEntity.getCreateUser())
+                            .append("\",\"createDate\":\"").append(itemEntity.getCreateDateStr())
+                            .append("\",\"modifyUser\":\"").append(itemEntity.getModifyUser())
+                            .append("\",\"modifyDate\":\"").append(itemEntity.getModifyDateStr())
                             .append("\"}");
                 }
             }
@@ -129,6 +132,8 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
                 }
                 sBuffer.append(",\"createUser\":\"").append(condEntity.getCreateUser())
                         .append("\",\"createDate\":\"").append(condEntity.getCreateDateStr())
+                        .append("\",\"modifyUser\":\"").append(condEntity.getModifyUser())
+                        .append("\",\"modifyDate\":\"").append(condEntity.getModifyDateStr())
                         .append("\"}");
             }
             sBuffer.append("],\"filterCount\":").append(y).append("}");
@@ -146,8 +151,8 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
      * @return    process result
      */
     public StringBuilder adminEnableDisableTopicAuthControl(HttpServletRequest req,
-                                                            StringBuilder sBuffer,
-                                                            ProcessResult result) {
+            StringBuilder sBuffer,
+            ProcessResult result) {
         // check and get operation info
         if (!WebParameterUtils.getAUDBaseInfo(req, true, null, sBuffer, result)) {
             WebParameterUtils.buildFailResult(sBuffer, result.getErrMsg());
@@ -162,12 +167,12 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
         }
         Set<String> topicNameSet = (Set<String>) result.getRetData();
         // get authCtrlStatus info
-        if (!WebParameterUtils.getBooleanParamValue(req, WebFieldDef.ISENABLE,
-                false, false, sBuffer, result)) {
+        if (!WebParameterUtils.getEnableStatusValue(req, WebFieldDef.ISENABLE,
+                false, EnableStatus.STATUS_DISABLE, sBuffer, result)) {
             WebParameterUtils.buildFailResult(sBuffer, result.getErrMsg());
             return sBuffer;
         }
-        Boolean enableTopicAuth = (Boolean) result.getRetData();
+        EnableStatus enableTopicAuth = (EnableStatus) result.getRetData();
         // add or update records
         List<TopicProcessResult> retInfo = new ArrayList<>();
         for (String topicName : topicNameSet) {
@@ -186,8 +191,8 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
      * @return    process result
      */
     public StringBuilder adminBatchAddTopicAuthControl(HttpServletRequest req,
-                                                       StringBuilder sBuffer,
-                                                       ProcessResult result) {
+            StringBuilder sBuffer,
+            ProcessResult result) {
         // check and get operation info
         if (!WebParameterUtils.getAUDBaseInfo(req, true, null, sBuffer, result)) {
             WebParameterUtils.buildFailResult(sBuffer, result.getErrMsg());
@@ -217,8 +222,8 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
      * @return    process result
      */
     public StringBuilder adminDeleteTopicAuthControl(HttpServletRequest req,
-                                                     StringBuilder sBuffer,
-                                                     ProcessResult result) {
+            StringBuilder sBuffer,
+            ProcessResult result) {
         // check and get operation info
         if (!WebParameterUtils.getAUDBaseInfo(req, false, null, sBuffer, result)) {
             WebParameterUtils.buildFailResult(sBuffer, result.getErrMsg());
@@ -233,16 +238,24 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
         }
         Set<String> topicNameSet = (Set<String>) result.getRetData();
         // delete records
+        TopicCtrlEntity ctrlEntity;
         List<TopicProcessResult> retInfo = new ArrayList<>();
         for (String topicName : topicNameSet) {
-            retInfo.add(defMetaDataService.insertTopicCtrlConf(opEntity,
-                    topicName, Boolean.FALSE, sBuffer, result));
+            ctrlEntity = defMetaDataService.getTopicCtrlByTopicName(topicName);
+            if (ctrlEntity != null
+                    && ctrlEntity.getAuthCtrlStatus() != EnableStatus.STATUS_DISABLE) {
+                retInfo.add(defMetaDataService.insertTopicCtrlConf(opEntity,
+                        topicName, EnableStatus.STATUS_DISABLE, sBuffer, result));
+            } else {
+                result.setFullInfo(true, DataOpErrCode.DERR_SUCCESS.getCode(), "Ok");
+                retInfo.add(new TopicProcessResult(0, topicName, result));
+            }
         }
         return buildRetInfo(retInfo, sBuffer);
     }
 
     private boolean getTopicCtrlJsonSetInfo(HttpServletRequest req, BaseEntity defOpEntity,
-                                            StringBuilder sBuffer, ProcessResult result) {
+            StringBuilder sBuffer, ProcessResult result) {
         if (!WebParameterUtils.getJsonArrayParamValue(req,
                 WebFieldDef.TOPICJSONSET, true, null, result)) {
             return result.isSuccess();
@@ -266,11 +279,11 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
             }
             String topicName = (String) result.getRetData();
             // get authCtrlStatus info
-            if (!WebParameterUtils.getBooleanParamValue(confMap, WebFieldDef.ISENABLE,
-                    false, false, sBuffer, result)) {
+            if (!WebParameterUtils.getEnableStatusValue(confMap, WebFieldDef.ISENABLE,
+                    false, EnableStatus.STATUS_DISABLE, sBuffer, result)) {
                 return result.isSuccess();
             }
-            Boolean enableTopicAuth = (Boolean) result.getRetData();
+            EnableStatus enableTopicAuth = (EnableStatus) result.getRetData();
             itemConf = new TopicCtrlEntity(itemOpEntity, topicName);
             itemConf.updModifyInfo(itemOpEntity.getDataVerId(),
                     TBaseConstants.META_VALUE_UNDEFINED,
@@ -291,7 +304,7 @@ public class WebAdminTopicAuthHandler extends AbstractWebHandler {
     }
 
     private StringBuilder buildRetInfo(List<TopicProcessResult> retInfo,
-                                       StringBuilder sBuffer) {
+            StringBuilder sBuffer) {
         int totalCnt = 0;
         WebParameterUtils.buildSuccessWithDataRetBegin(sBuffer);
         for (TopicProcessResult entry : retInfo) {

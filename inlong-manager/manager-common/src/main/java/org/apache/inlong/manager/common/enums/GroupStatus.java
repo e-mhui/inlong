@@ -19,6 +19,7 @@ package org.apache.inlong.manager.common.enums;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import org.apache.inlong.manager.common.exceptions.BusinessException;
 
 import java.util.Locale;
 import java.util.Map;
@@ -29,7 +30,6 @@ import java.util.Set;
  */
 public enum GroupStatus {
 
-    DRAFT(0, "draft"),
     TO_BE_SUBMIT(100, "waiting for submit"),
     TO_BE_APPROVAL(101, "waiting for approval"),
 
@@ -49,7 +49,7 @@ public enum GroupStatus {
     DELETING(41, "deleting"),
     DELETED(40, "deleted"),
 
-    // GROUP_FINISH is used for batch task.
+    // FINISH is used for batch task.
     FINISH(131, "finish");
 
     private static final Map<GroupStatus, Set<GroupStatus>> GROUP_STATE_AUTOMATON = Maps.newHashMap();
@@ -58,17 +58,15 @@ public enum GroupStatus {
      * Init group finite status automaton
      */
     static {
-        GROUP_STATE_AUTOMATON.put(DRAFT, Sets.newHashSet(DRAFT, TO_BE_SUBMIT, DELETING));
         GROUP_STATE_AUTOMATON.put(TO_BE_SUBMIT, Sets.newHashSet(TO_BE_SUBMIT, TO_BE_APPROVAL, DELETING));
-        GROUP_STATE_AUTOMATON.put(TO_BE_APPROVAL,
-                Sets.newHashSet(TO_BE_APPROVAL, APPROVE_REJECTED, APPROVE_PASSED, DELETING));
+        GROUP_STATE_AUTOMATON.put(TO_BE_APPROVAL, Sets.newHashSet(TO_BE_APPROVAL, APPROVE_REJECTED, APPROVE_PASSED));
 
         GROUP_STATE_AUTOMATON.put(APPROVE_REJECTED, Sets.newHashSet(APPROVE_REJECTED, TO_BE_APPROVAL, DELETING));
         GROUP_STATE_AUTOMATON.put(APPROVE_PASSED, Sets.newHashSet(APPROVE_PASSED, CONFIG_ING, DELETING));
 
         GROUP_STATE_AUTOMATON.put(CONFIG_ING, Sets.newHashSet(CONFIG_ING, CONFIG_FAILED, CONFIG_SUCCESSFUL));
         GROUP_STATE_AUTOMATON.put(CONFIG_FAILED,
-                Sets.newHashSet(CONFIG_FAILED, CONFIG_SUCCESSFUL, TO_BE_APPROVAL, DELETING));
+                Sets.newHashSet(CONFIG_FAILED, CONFIG_ING, CONFIG_SUCCESSFUL, TO_BE_APPROVAL, DELETING));
         GROUP_STATE_AUTOMATON.put(CONFIG_SUCCESSFUL,
                 Sets.newHashSet(CONFIG_SUCCESSFUL, TO_BE_APPROVAL, CONFIG_ING, SUSPENDING, DELETING, FINISH));
 
@@ -98,7 +96,8 @@ public enum GroupStatus {
                 return status;
             }
         }
-        throw new IllegalStateException(String.format("Illegal code=%s for GroupStatus", code));
+        throw new BusinessException(ErrorCodeEnum.ILLEGAL_RECORD_FIELD_VALUE,
+                String.format("Illegal code=%s for GroupStatus", code));
     }
 
     public static boolean notAllowedTransition(GroupStatus pre, GroupStatus now) {
@@ -107,36 +106,76 @@ public enum GroupStatus {
     }
 
     /**
-     * Checks whether the given status allows the update.
+     * Checks whether the given status allows updating operate.
      */
     public static boolean notAllowedUpdate(GroupStatus status) {
-        return status == GroupStatus.CONFIG_ING || status == GroupStatus.SUSPENDING
-                || status == GroupStatus.RESTARTING || status == GroupStatus.DELETING;
+        return status == GroupStatus.TO_BE_APPROVAL
+                || status == GroupStatus.CONFIG_ING
+                || status == GroupStatus.SUSPENDING
+                || status == GroupStatus.RESTARTING
+                || status == GroupStatus.DELETING;
     }
 
     /**
-     * Checks whether the given status allows the logical delete
+     * Checks whether the given status allows updating the MQ type of inlong group.
      */
-    public static boolean allowedLogicDelete(GroupStatus status) {
-        return status == GroupStatus.DRAFT || status == GroupStatus.TO_BE_SUBMIT
-                || status == GroupStatus.DELETED || status == GroupStatus.FINISH;
+    public static boolean allowedUpdateMQ(GroupStatus status) {
+        return status == GroupStatus.TO_BE_SUBMIT
+                || status == GroupStatus.TO_BE_APPROVAL
+                || status == GroupStatus.APPROVE_REJECTED
+                || status == GroupStatus.CONFIG_FAILED;
     }
 
     /**
-     * Only the {@link GroupStatus#DRAFT} and {@link GroupStatus#TO_BE_SUBMIT} status
-     * allows change the MQ type of inlong group.
+     * Checks whether the given status allows updating stream source.
      */
-    public static boolean notAllowedUpdateMQ(GroupStatus status) {
-        return status != GroupStatus.DRAFT && status != GroupStatus.TO_BE_SUBMIT
-                && status != GroupStatus.TO_BE_APPROVAL && status != GroupStatus.APPROVE_REJECTED
-                && status != GroupStatus.CONFIG_FAILED;
+    public static boolean allowedUpdateSource(GroupStatus status) {
+        return status == GroupStatus.CONFIG_SUCCESSFUL
+                || status == GroupStatus.CONFIG_FAILED;
+    }
+
+    /**
+     * Checks whether the given status needs to delete the inlong stream first.
+     */
+    public static boolean deleteStreamFirst(GroupStatus status) {
+        return status == GroupStatus.APPROVE_PASSED
+                || status == GroupStatus.CONFIG_FAILED
+                || status == GroupStatus.CONFIG_SUCCESSFUL
+                || status == GroupStatus.SUSPENDED
+                || status == GroupStatus.RESTARTED
+                || status == GroupStatus.FINISH;
+    }
+
+    /**
+     * Checks whether the given status allows deleting other infos,
+     * <p/>
+     * If true, will logically delete all related infos, including streams, sources, sinks, etc.
+     */
+    public static boolean allowedDeleteSubInfos(GroupStatus status) {
+        return status == GroupStatus.TO_BE_SUBMIT
+                || status == GroupStatus.APPROVE_REJECTED
+                || status == GroupStatus.DELETED;
+    }
+
+    /**
+     * Checks whether the given status allows suspending operate.
+     */
+    public static boolean allowedSuspend(GroupStatus status) {
+        return status == GroupStatus.CONFIG_SUCCESSFUL
+                || status == GroupStatus.RESTARTED
+                || status == GroupStatus.SUSPENDED
+                || status == GroupStatus.FINISH;
     }
 
     /**
      * Temporary group status, adding, deleting and modifying operations are not allowed
      */
     public static boolean isTempStatus(GroupStatus status) {
-        return status == TO_BE_APPROVAL || status == CONFIG_ING;
+        return status == TO_BE_APPROVAL
+                || status == CONFIG_ING
+                || status == SUSPENDING
+                || status == RESTARTING
+                || status == DELETING;
     }
 
     public Integer getCode() {
@@ -149,6 +188,7 @@ public enum GroupStatus {
 
     @Override
     public String toString() {
-        return name().toLowerCase(Locale.ROOT).replace("group_", "");
+        return name().toLowerCase(Locale.ROOT);
     }
+
 }

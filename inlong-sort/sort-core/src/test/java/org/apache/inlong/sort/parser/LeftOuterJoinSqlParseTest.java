@@ -21,13 +21,13 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.test.util.AbstractTestBase;
-import org.apache.inlong.sort.parser.impl.FlinkSqlParser;
-import org.apache.inlong.sort.parser.result.ParseResult;
 import org.apache.inlong.sort.formats.common.FloatFormatInfo;
 import org.apache.inlong.sort.formats.common.IntFormatInfo;
 import org.apache.inlong.sort.formats.common.LongFormatInfo;
 import org.apache.inlong.sort.formats.common.StringFormatInfo;
 import org.apache.inlong.sort.formats.common.TimestampFormatInfo;
+import org.apache.inlong.sort.parser.impl.FlinkSqlParser;
+import org.apache.inlong.sort.parser.result.ParseResult;
 import org.apache.inlong.sort.protocol.FieldInfo;
 import org.apache.inlong.sort.protocol.GroupInfo;
 import org.apache.inlong.sort.protocol.StreamInfo;
@@ -77,7 +77,7 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
         return new KafkaExtractNode("1", "kafka_input_1", fields, null,
                 null, "topic_input_1", "localhost:9092",
                 new JsonFormat(), KafkaScanStartupMode.EARLIEST_OFFSET,
-                null, "groupId", null);
+                null, "groupId", null, null);
     }
 
     /**
@@ -91,7 +91,7 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
         return new KafkaExtractNode("2", "kafka_input_2", fields, null,
                 null, "topic_input_2", "localhost:9092",
                 new JsonFormat(), KafkaScanStartupMode.EARLIEST_OFFSET,
-                null, "groupId", null);
+                null, "groupId", null, null);
     }
 
     /**
@@ -105,7 +105,7 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
                 new FieldInfo("ts", new TimestampFormatInfo()));
         return new KafkaExtractNode("3", "kafka_input_3", fields, null,
                 null, "topic_input_3", "localhost:9092",
-                new JsonFormat(), KafkaScanStartupMode.EARLIEST_OFFSET, null, "groupId", null);
+                new JsonFormat(), KafkaScanStartupMode.EARLIEST_OFFSET, null, "groupId", null, null);
     }
 
     /**
@@ -121,7 +121,7 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
                 new FieldInfo("ts", new TimestampFormatInfo()));
         List<FieldRelation> relations = Arrays
                 .asList(new FieldRelation(new FieldInfo("id", "1", new LongFormatInfo()),
-                                new FieldInfo("id", new LongFormatInfo())),
+                        new FieldInfo("id", new LongFormatInfo())),
                         new FieldRelation(new FieldInfo("name", "1", new StringFormatInfo()),
                                 new FieldInfo("name", new StringFormatInfo())),
                         new FieldRelation(new FieldInfo("age", "2", new IntFormatInfo()),
@@ -129,8 +129,7 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
                         new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
                                 new FieldInfo("ts", new TimestampFormatInfo())),
                         new FieldRelation(new FieldInfo("salary", "3", new TimestampFormatInfo()),
-                                new FieldInfo("salary", new TimestampFormatInfo()))
-                );
+                                new FieldInfo("salary", new TimestampFormatInfo())));
         return new KafkaLoadNode("5", "kafka_output", fields, relations, null,
                 null, "topic_output", "localhost:9092",
                 new JsonFormat(), null,
@@ -148,19 +147,19 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
                         new FieldInfo("name", new StringFormatInfo()),
                         new FieldInfo("age", new IntFormatInfo()),
                         new FieldInfo("salary", new FloatFormatInfo()),
-                        new FieldInfo("ts", new TimestampFormatInfo())
-                ), Arrays.asList(
-                new FieldRelation(new FieldInfo("id", "1", new LongFormatInfo()),
-                        new FieldInfo("id", new LongFormatInfo())),
-                new FieldRelation(new FieldInfo("name", "1", new StringFormatInfo()),
-                        new FieldInfo("name", new StringFormatInfo())),
-                new FieldRelation(new FieldInfo("age", "2", new IntFormatInfo()),
-                        new FieldInfo("age", new IntFormatInfo())),
-                new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
                         new FieldInfo("ts", new TimestampFormatInfo())),
-                new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
-                        new FieldInfo("ts", new TimestampFormatInfo()))
-        ), null, null);
+                Arrays.asList(
+                        new FieldRelation(new FieldInfo("id", "1", new LongFormatInfo()),
+                                new FieldInfo("id", new LongFormatInfo())),
+                        new FieldRelation(new FieldInfo("name", "1", new StringFormatInfo()),
+                                new FieldInfo("name", new StringFormatInfo())),
+                        new FieldRelation(new FieldInfo("age", "2", new IntFormatInfo()),
+                                new FieldInfo("age", new IntFormatInfo())),
+                        new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
+                                new FieldInfo("ts", new TimestampFormatInfo())),
+                        new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
+                                new FieldInfo("ts", new TimestampFormatInfo()))),
+                null, null);
     }
 
     /**
@@ -175,28 +174,27 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
                         NotEqualOperator.getInstance(), new ConstantParam("1")),
                 new SingleValueFilterFunction(AndOperator.getInstance(),
                         new FieldInfo("age", "2", new IntFormatInfo()),
-                        MoreThanOrEqualOperator.getInstance(), new ConstantParam("18"))
-        );
+                        MoreThanOrEqualOperator.getInstance(), new ConstantParam("18")));
         return new DistinctNode("4", "transform_node",
                 Arrays.asList(new FieldInfo("id", new LongFormatInfo()),
                         new FieldInfo("name", new StringFormatInfo()),
                         new FieldInfo("age", new IntFormatInfo()),
                         new FieldInfo("salary", new FloatFormatInfo()),
-                        new FieldInfo("ts", new TimestampFormatInfo())
-                ), Arrays.asList(
-                new FieldRelation(new FieldInfo("id", "1", new LongFormatInfo()),
-                        new FieldInfo("id", new LongFormatInfo())),
-                new FieldRelation(new FieldInfo("name", "1", new StringFormatInfo()),
-                        new FieldInfo("name", new StringFormatInfo())),
-                new FieldRelation(new FieldInfo("age", "2", new IntFormatInfo()),
-                        new FieldInfo("age", new IntFormatInfo())),
-                new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
                         new FieldInfo("ts", new TimestampFormatInfo())),
-                new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
-                        new FieldInfo("ts", new TimestampFormatInfo())),
-                new FieldRelation(new FieldInfo("salary", "3", new TimestampFormatInfo()),
-                        new FieldInfo("salary", new TimestampFormatInfo()))
-        ), filters, FilterStrategy.RETAIN,
+                Arrays.asList(
+                        new FieldRelation(new FieldInfo("id", "1", new LongFormatInfo()),
+                                new FieldInfo("id", new LongFormatInfo())),
+                        new FieldRelation(new FieldInfo("name", "1", new StringFormatInfo()),
+                                new FieldInfo("name", new StringFormatInfo())),
+                        new FieldRelation(new FieldInfo("age", "2", new IntFormatInfo()),
+                                new FieldInfo("age", new IntFormatInfo())),
+                        new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
+                                new FieldInfo("ts", new TimestampFormatInfo())),
+                        new FieldRelation(new FieldInfo("ts", "3", new TimestampFormatInfo()),
+                                new FieldInfo("ts", new TimestampFormatInfo())),
+                        new FieldRelation(new FieldInfo("salary", "3", new TimestampFormatInfo()),
+                                new FieldInfo("salary", new TimestampFormatInfo()))),
+                filters, FilterStrategy.RETAIN,
                 Collections.singletonList(new FieldInfo("name", "1", new StringFormatInfo())),
                 new FieldInfo("ts", "3", new TimestampFormatInfo()), OrderDirection.ASC);
     }
@@ -263,8 +261,7 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
                         buildLeftOuterJoinNodeRelation(Arrays.asList(inputNode, inputNode2, inputNode3),
                                 Collections.singletonList(tansformNode)),
                         buildNodeRelation(Collections.singletonList(tansformNode),
-                                Collections.singletonList(outputNode))
-                ));
+                                Collections.singletonList(outputNode))));
         GroupInfo groupInfo = new GroupInfo("group_id", Collections.singletonList(streamInfo));
         FlinkSqlParser parser = FlinkSqlParser.getInstance(tableEnv, groupInfo);
         ParseResult result = parser.parse();
@@ -301,8 +298,7 @@ public class LeftOuterJoinSqlParseTest extends AbstractTestBase {
                         buildLeftOuterJoinNodeRelation(Arrays.asList(inputNode, inputNode2, inputNode3),
                                 Collections.singletonList(tansformNode)),
                         buildNodeRelation(Collections.singletonList(tansformNode),
-                                Collections.singletonList(outputNode))
-                ));
+                                Collections.singletonList(outputNode))));
         GroupInfo groupInfo = new GroupInfo("group_id", Collections.singletonList(streamInfo));
         FlinkSqlParser parser = FlinkSqlParser.getInstance(tableEnv, groupInfo);
         ParseResult result = parser.parse();

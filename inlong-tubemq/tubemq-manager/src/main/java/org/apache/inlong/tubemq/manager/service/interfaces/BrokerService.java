@@ -45,13 +45,13 @@ public interface BrokerService {
     void updateBrokersRegion(List<Long> brokerIdList, Long regionId, Long clusterId);
 
     /**
-     * check if all the brokers exsit in this cluster
+     * check if all the brokers exist in this cluster
      *
      * @param brokerIdList
      * @param clusterId
      * @return
      */
-    boolean checkIfBrokersAllExsit(List<Long> brokerIdList, long clusterId);
+    boolean checkIfBrokersAllExist(List<Long> brokerIdList, long clusterId);
 
     /**
      * get all broker id list in a region
@@ -81,7 +81,7 @@ public interface BrokerService {
      * @return
      */
     TubeMQResult deleteOffset(String brokerIp, int brokerWebPort,
-                              DeleteOffsetReq req);
+            DeleteOffsetReq req);
 
     OffsetQueryRes queryOffset(String brokerIp, int brokerWebPort, QueryOffsetReq req);
 }

@@ -17,12 +17,13 @@
 
 package org.apache.inlong.manager.service.source;
 
-import com.github.pagehelper.PageInfo;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.source.SourcePageRequest;
 import org.apache.inlong.manager.pojo.source.SourceRequest;
 import org.apache.inlong.manager.pojo.source.StreamSource;
 import org.apache.inlong.manager.pojo.stream.InlongStreamInfo;
+import org.apache.inlong.manager.pojo.user.UserInfo;
 
 import java.util.List;
 import java.util.Map;
@@ -42,12 +43,30 @@ public interface StreamSourceService {
     Integer save(SourceRequest request, String operator);
 
     /**
+     * Save the source information
+     *
+     * @param request Source request.
+     * @param opInfo userinfo of operator
+     * @return source id after saving.
+     */
+    Integer save(SourceRequest request, UserInfo opInfo);
+
+    /**
      * Query source information based on id
      *
      * @param id source id.
      * @return Source info
      */
     StreamSource get(Integer id);
+
+    /**
+     * Query source information based on id
+     *
+     * @param id source id.
+     * @param opInfo userinfo of operator
+     * @return Source info
+     */
+    StreamSource get(Integer id, UserInfo opInfo);
 
     /**
      * Query source information based on inlong group id and inlong stream id.
@@ -85,7 +104,16 @@ public interface StreamSourceService {
      * @param request paging request.
      * @return source list
      */
-    PageInfo<? extends StreamSource> listByCondition(SourcePageRequest request);
+    PageResult<? extends StreamSource> listByCondition(SourcePageRequest request);
+
+    /**
+     * Paging query source information based on conditions.
+     *
+     * @param request paging request.
+     * @param opInfo userinfo of operator
+     * @return source list
+     */
+    PageResult<? extends StreamSource> listByCondition(SourcePageRequest request, UserInfo opInfo);
 
     /**
      * Modify data source information
@@ -95,6 +123,15 @@ public interface StreamSourceService {
      * @return whether succeed
      */
     Boolean update(SourceRequest sourceRequest, String operator);
+
+    /**
+     * Modify data source information
+     *
+     * @param sourceRequest Information that needs to be modified
+     * @param opInfo userinfo of operator
+     * @return whether succeed
+     */
+    Boolean update(SourceRequest sourceRequest, UserInfo opInfo);
 
     /**
      * Update source status by the given groupId and streamId
@@ -115,6 +152,25 @@ public interface StreamSourceService {
      * @return Whether succeed
      */
     Boolean delete(Integer id, String operator);
+
+    /**
+     * Delete the stream source by the given id and source type.
+     *
+     * @param id The primary key of the source.
+     * @param opInfo userinfo of operator
+     * @return Whether succeed
+     */
+    Boolean delete(Integer id, UserInfo opInfo);
+
+    /**
+     * Force deletes the stream source by groupId and streamId
+     *
+     * @param groupId The belongs group id.
+     * @param streamId The belongs stream id.
+     * @param operator Operator's name
+     * @return Whether succeed
+     */
+    Boolean forceDelete(String groupId, String streamId, String operator);
 
     /**
      * Delete the stream source by the given id and source type.

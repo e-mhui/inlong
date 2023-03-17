@@ -13,7 +13,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.apache.inlong.agent.constant;
@@ -24,12 +23,12 @@ package org.apache.inlong.agent.constant;
 public class DataCollectType {
 
     /**
-     * increment of data
+     * Start collecting from the last line of the file
      */
     public static final String INCREMENT = "INCREMENT";
 
     /**
-     * full data
+     * Start collecting from the first line of the file
      */
     public static final String FULL = "FULL";
 }

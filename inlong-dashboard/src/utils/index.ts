@@ -17,6 +17,8 @@
  * under the License.
  */
 
+import cloneDeep from 'lodash/cloneDeep';
+
 export function isDevelopEnv() {
   if (process.env.NODE_ENV === 'development') {
     return true;
@@ -130,6 +132,7 @@ export function filterObj(obj: Record<string, any>, keyList: string[]) {
  * @param key Flag
  */
 export function pickObjectArray(keys = [], sourceArr = [], key = 'name') {
+  if (!sourceArr || !sourceArr.length) return sourceArr;
   const map = new Map(sourceArr.map(item => [item[key], item]));
   if (isDevelopEnv()) {
     // Increase the log in the development environment to facilitate debugging
@@ -183,6 +186,7 @@ export function excludeObject<T>(keys = [], sourceObj: Record<string, unknown>):
  * @param key Flag
  */
 export function excludeObjectArray(keys = [], sourceArr = [], key = 'name') {
+  if (!sourceArr || !sourceArr.length) return sourceArr;
   const set = new Set(keys);
   return sourceArr.filter(item => !set.has(item[key]));
 }
@@ -203,4 +207,37 @@ export function getStrByteLen(str: string): number {
     }
   }
   return len;
+}
+
+function treeToArrayHelper(
+  tree: any[],
+  id: string,
+  pid: string,
+  children: string,
+  parent: any = null,
+): any[] {
+  let data = cloneDeep(tree);
+  return data.reduce((accumulator, item) => {
+    const { [children]: itemChildren } = item;
+    let result;
+    if (parent && !item[pid]) {
+      item[pid] = parent[id];
+    }
+    if (parent) {
+      item.deepKey = parent.deepKey.concat(item[id]);
+    } else {
+      item.deepKey = [item[id]];
+    }
+    if (itemChildren) {
+      result = accumulator.concat(item, treeToArrayHelper(itemChildren, id, pid, children, item));
+      delete item[children];
+    } else {
+      result = accumulator.concat(item);
+    }
+    return result;
+  }, []);
+}
+
+export function treeToArray(tree: any[], id = 'id', pid = 'pid', children = 'children') {
+  return treeToArrayHelper(tree, id, pid, children);
 }

@@ -42,7 +42,6 @@ import org.apache.inlong.common.db.CommandEntity;
 import org.apache.inlong.common.enums.ManagerOpEnum;
 import org.apache.inlong.common.enums.PullJobTypeEnum;
 import org.apache.inlong.common.pojo.agent.CmdConfig;
-import org.apache.inlong.common.pojo.agent.DataConfig;
 import org.apache.inlong.common.pojo.agent.TaskRequest;
 import org.apache.inlong.common.pojo.agent.TaskResult;
 import org.slf4j.Logger;
@@ -151,7 +150,7 @@ public class ManagerFetcher extends AbstractDaemon implements ProfileFetcher {
     private String buildBaseUrl() {
         return "http://" + conf.get(AGENT_MANAGER_VIP_HTTP_HOST)
                 + ":" + conf.get(AGENT_MANAGER_VIP_HTTP_PORT) + conf.get(
-                AGENT_MANAGER_VIP_HTTP_PREFIX_PATH, DEFAULT_AGENT_MANAGER_VIP_HTTP_PREFIX_PATH);
+                        AGENT_MANAGER_VIP_HTTP_PREFIX_PATH, DEFAULT_AGENT_MANAGER_VIP_HTTP_PREFIX_PATH);
     }
 
     /**
@@ -255,7 +254,7 @@ public class ManagerFetcher extends AbstractDaemon implements ProfileFetcher {
      * request manager to get db collect task, make sure it is not throwing exceptions
      */
     public void fetchDbCollectTask() {
-        if (agentManager.getJobManager().sqlJobExsit()) {
+        if (agentManager.getJobManager().sqlJobExist()) {
             return;
         }
         JsonObject resultData = getResultData(httpManager.doSentPost(managerDbCollectorTaskUrl, getSqlTaskRequest()));
@@ -285,19 +284,18 @@ public class ManagerFetcher extends AbstractDaemon implements ProfileFetcher {
         if (!taskResult.getCmdConfigs().isEmpty() || !taskResult.getDataConfigs().isEmpty()) {
             LOGGER.info("deal with fetch result {}", taskResult);
         }
-        for (DataConfig dataConfig : taskResult.getDataConfigs()) {
-            TriggerProfile profile = TriggerProfile.getTriggerProfiles(dataConfig);
-            LOGGER.info("the triggerProfile: {}", profile.toJsonStr());
-            if (profile.hasKey(JOB_TRIGGER)) {
-                dealWithTdmTriggerProfile(profile);
-            } else {
-                dealWithJobProfile(profile);
-            }
-        }
-
-        for (CmdConfig cmdConfig : taskResult.getCmdConfigs()) {
-            dealWithTdmCmd(cmdConfig);
-        }
+        taskResult.getDataConfigs().stream()
+                .map(TriggerProfile::getTriggerProfiles)
+                .forEach(profile -> {
+                    LOGGER.info("the triggerProfile: {}", profile.toJsonStr());
+                    if (profile.hasKey(JOB_TRIGGER)) {
+                        dealWithTdmTriggerProfile(profile);
+                    } else {
+                        dealWithJobProfile(profile);
+                    }
+                });
+        // todo: delete this statement,cmd would never be issued
+        taskResult.getCmdConfigs().forEach(this::dealWithTdmCmd);
     }
 
     /**
@@ -386,12 +384,11 @@ public class ManagerFetcher extends AbstractDaemon implements ProfileFetcher {
                 triggerProfile, dataTime);
         Collection<File> suitFiles = PluginUtils.findSuitFiles(triggerProfile);
         // filter files exited before
-        List<File> pendingFiles = suitFiles.stream().filter(file ->
-                !agentManager.getJobManager().checkJobExsit(file.getAbsolutePath()))
-                .collect(Collectors.toList());
+        List<File> pendingFiles =
+                suitFiles.stream().filter(file -> !agentManager.getJobManager().checkJobExist(file.getAbsolutePath()))
+                        .collect(Collectors.toList());
         for (File pendingFile : pendingFiles) {
-            JobProfile copiedProfile = copyJobProfile(triggerProfile, dataTime,
-                    pendingFile);
+            JobProfile copiedProfile = copyJobProfile(triggerProfile, pendingFile);
             LOGGER.info("ready to make up file with job {}", copiedProfile.toJsonStr());
             agentManager.getJobManager().submitFileJobProfile(copiedProfile);
         }
@@ -403,17 +400,22 @@ public class ManagerFetcher extends AbstractDaemon implements ProfileFetcher {
      */
     public void dealWithTdmTriggerProfile(TriggerProfile triggerProfile) {
         ManagerOpEnum opType = ManagerOpEnum.getOpType(triggerProfile.getInt(JOB_OP));
-        boolean success = false;
-        switch (requireNonNull(opType)) {
-            case ACTIVE:
-            case ADD:
-                success = agentManager.getTriggerManager().submitTrigger(triggerProfile);
-                break;
-            case DEL:
-            case FROZEN:
-                success = agentManager.getTriggerManager().deleteTrigger(triggerProfile.getTriggerId());
-                break;
-            default:
+        boolean success = true;
+        try {
+            switch (requireNonNull(opType)) {
+                case ACTIVE:
+                case ADD:
+                    agentManager.getTriggerManager().submitTrigger(triggerProfile);
+                    break;
+                case DEL:
+                case FROZEN:
+                    agentManager.getTriggerManager().deleteTrigger(triggerProfile.getTriggerId());
+                    break;
+                default:
+            }
+        } catch (Exception e) {
+            LOGGER.error("Deal with trigger profile err.", e);
+            success = false;
         }
         commandDb.saveNormalCmds(triggerProfile, success);
     }
@@ -423,17 +425,22 @@ public class ManagerFetcher extends AbstractDaemon implements ProfileFetcher {
      */
     public void dealWithJobProfile(TriggerProfile triggerProfile) {
         ManagerOpEnum opType = ManagerOpEnum.getOpType(triggerProfile.getInt(JOB_OP));
-        boolean success = false;
-        switch (requireNonNull(opType)) {
-            case ACTIVE:
-            case ADD:
-                success = agentManager.getJobManager().submitJobProfile(triggerProfile, true);
-                break;
-            case DEL:
-            case FROZEN:
-                success = agentManager.getJobManager().deleteJob(triggerProfile.getTriggerId());
-                break;
-            default:
+        boolean success = true;
+        try {
+            switch (requireNonNull(opType)) {
+                case ACTIVE:
+                case ADD:
+                    success = agentManager.getJobManager().submitJobProfile(triggerProfile, true);
+                    break;
+                case DEL:
+                case FROZEN:
+                    success = agentManager.getJobManager().deleteJob(triggerProfile.getTriggerId());
+                    break;
+                default:
+            }
+        } catch (Exception e) {
+            LOGGER.error("Deal with job profile err.", e);
+            success = false;
         }
         commandDb.saveNormalCmds(triggerProfile, success);
     }
@@ -443,8 +450,8 @@ public class ManagerFetcher extends AbstractDaemon implements ProfileFetcher {
      */
     private String confirmLocalIps(List<String> localIps) {
         ConfirmAgentIpRequest request = new ConfirmAgentIpRequest(AGENT, localIps);
-        JsonObject resultData = getResultData(httpManager.doSentPost(managerIpsCheckUrl, request))
-                .get(AGENT_MANAGER_RETURN_PARAM_DATA).getAsJsonObject();
+        JsonObject resultData = getResultData(httpManager.doSentPost(managerIpsCheckUrl, request)).get(
+                AGENT_MANAGER_RETURN_PARAM_DATA).getAsJsonObject();
         if (!resultData.has(AGENT_MANAGER_RETURN_PARAM_IP)) {
             throw new IllegalArgumentException("cannot get ip from data " + resultData.getAsString());
         }
@@ -483,6 +490,7 @@ public class ManagerFetcher extends AbstractDaemon implements ProfileFetcher {
      */
     private Runnable profileFetchThread() {
         return () -> {
+            Thread.currentThread().setName("ManagerFetcher");
             while (isRunnable()) {
                 try {
                     int configSleepTime = conf.getInt(AGENT_FETCHER_INTERVAL,

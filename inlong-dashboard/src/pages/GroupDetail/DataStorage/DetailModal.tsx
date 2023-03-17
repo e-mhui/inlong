@@ -17,169 +17,143 @@
  * under the License.
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
-import { Modal, message } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Skeleton, Modal, message } from 'antd';
 import { ModalProps } from 'antd/es/modal';
 import { useRequest, useUpdateEffect } from '@/hooks';
 import { useTranslation } from 'react-i18next';
-import FormGenerator, { useForm, FormItemProps } from '@/components/FormGenerator';
-import { Sinks, SinkType } from '@/metas/sinks';
+import EditableTable from '@/components/EditableTable';
+import FormGenerator, { useForm } from '@/components/FormGenerator';
+import { useLoadMeta, SinkMetaType } from '@/metas';
 import request from '@/utils/request';
 
 export interface DetailModalProps extends ModalProps {
   inlongGroupId: string;
+  inlongStreamId: string;
+  defaultType?: string;
   // (True operation, save and adjust interface) Need to upload when editing
   id?: string;
   // others
   onOk?: (values) => void;
 }
 
-const SinksMap: Record<string, SinkType> = Sinks.reduce(
-  (acc, cur) => ({
-    ...acc,
-    [cur.value]: cur,
-  }),
-  {},
-);
-
-const Comp: React.FC<DetailModalProps> = ({ inlongGroupId, id, ...modalProps }) => {
+const Comp: React.FC<DetailModalProps> = ({
+  inlongGroupId,
+  inlongStreamId,
+  defaultType,
+  id,
+  ...modalProps
+}) => {
   const [form] = useForm();
 
   const { t } = useTranslation();
 
-  const [currentValues, setCurrentValues] = useState({});
+  // Q: Why sinkType default = '' ?
+  // A: Avoid the table of the fields triggering the monitoring of the column change.
+  const [sinkType, setSinkType] = useState('');
 
-  const [sinkType, setSinkType] = useState(Sinks[0].value);
+  const { Entity } = useLoadMeta<SinkMetaType>('sink', sinkType);
 
-  const toFormVals = useCallback(
-    v => {
-      const mapFunc = SinksMap[sinkType]?.toFormValues;
-      return mapFunc ? mapFunc(v) : v;
-    },
-    [sinkType],
-  );
+  const { data: groupData, run: getGroupData } = useRequest(`/group/get/${inlongGroupId}`, {
+    manual: true,
+    ready: Boolean(inlongGroupId),
+    refreshDeps: [inlongGroupId],
+  });
 
-  const toSubmitVals = useCallback(
-    v => {
-      const mapFunc = SinksMap[sinkType]?.toSubmitValues;
-      return mapFunc ? mapFunc(v) : v;
-    },
-    [sinkType],
-  );
-
-  const { data, run: getData } = useRequest(
+  const {
+    data,
+    loading,
+    run: getData,
+  } = useRequest(
     id => ({
       url: `/sink/get/${id}`,
+    }),
+    {
+      manual: true,
+      formatResult: result => new Entity()?.parse(result) || result,
+      onSuccess: result => {
+        setSinkType(result.sinkType);
+        form.setFieldsValue(result);
+      },
+    },
+  );
+
+  const { data: streamDetail, run: getStreamDetail } = useRequest(
+    streamId => ({
+      url: `/stream/get`,
       params: {
-        sinkType,
+        groupId: inlongGroupId,
+        streamId,
       },
     }),
     {
       manual: true,
-      formatResult: result => toFormVals(result),
-      onSuccess: result => {
-        form.setFieldsValue(result);
-        setCurrentValues(result);
-        setSinkType(result.sinkType);
-      },
     },
   );
+
+  useEffect(() => {
+    if (inlongStreamId) {
+      getStreamDetail(inlongStreamId);
+    }
+  }, [getStreamDetail, inlongStreamId]);
+
+  useEffect(() => {
+    if (
+      !id &&
+      Entity &&
+      streamDetail &&
+      streamDetail.fieldList?.length &&
+      Entity.FieldList?.some(item => item.name === 'sinkFieldList')
+    ) {
+      form.setFieldsValue({
+        sinkFieldList: streamDetail.fieldList.map(item => ({
+          sourceFieldName: item.fieldName,
+          sourceFieldType: item.fieldType,
+          fieldName: item.fieldName,
+          fieldType: '',
+        })),
+      });
+    }
+  }, [Entity, streamDetail, form, id]);
 
   useUpdateEffect(() => {
     if (modalProps.visible) {
       // open
-      form.resetFields(); // Note that it will cause the form to remount to initiate a select request
       if (id) {
+        getGroupData();
         getData(id);
+      } else {
+        form.setFieldsValue({ inlongGroupId, sinkType: defaultType });
+        setSinkType(defaultType);
       }
     } else {
-      setCurrentValues({});
+      form.resetFields();
+      setSinkType('');
     }
   }, [modalProps.visible]);
 
   const formContent = useMemo(() => {
-    const getForm = SinksMap[sinkType].getForm;
-    const config = getForm('form', {
-      currentValues,
-      inlongGroupId,
-      isEdit: !!id,
-      form,
-    }) as FormItemProps[];
-    return [
-      {
-        type: 'select',
-        label: t('pages.GroupDetail.Sink.DataStreams'),
-        name: 'inlongStreamId',
-        props: {
-          disabled: !!id,
-          options: {
-            requestService: {
-              url: '/stream/list',
-              method: 'POST',
-              data: {
-                pageNum: 1,
-                pageSize: 1000,
-                inlongGroupId,
-              },
-            },
-            requestParams: {
-              formatResult: result =>
-                result?.list.map(item => ({
-                  label: item.inlongStreamId,
-                  value: item.inlongStreamId,
-                })) || [],
-            },
-          },
-        },
-        rules: [{ required: true }],
-      },
-      {
-        name: 'sinkName',
-        type: 'input',
-        label: t('meta.Sinks.SinkName'),
-        rules: [
-          { required: true },
-          {
-            pattern: /^[a-zA-Z][a-zA-Z0-9_-]*$/,
-            message: t('meta.Sinks.SinkNameRule'),
-          },
-        ],
-        props: {
-          disabled: !!id,
-        },
-      },
-      {
-        name: 'sinkType',
-        type: 'select',
-        label: t('meta.Sinks.SinkType'),
-        rules: [{ required: true }],
-        initialValue: sinkType,
-        props: {
-          disabled: !!id,
-          options: Sinks,
-          onChange: value => setSinkType(value),
-        },
-      },
-      {
-        name: 'description',
-        type: 'textarea',
-        label: t('meta.Sinks.Description'),
-        props: {
-          showCount: true,
-          maxLength: 300,
-        },
-      } as FormItemProps,
-    ].concat(config);
-  }, [sinkType, inlongGroupId, id, currentValues, form, t]);
+    if (Entity) {
+      const row = new Entity().renderRow();
+      return row.map(item => ({
+        ...item,
+        col: item.type === EditableTable ? 24 : 12,
+      }));
+    }
 
-  const onOk = async () => {
+    return [];
+  }, [Entity]);
+
+  const onOk = async (startProcess = false) => {
     const values = await form.validateFields();
-    delete values._showHigher; // delete front-end key
-    const submitData = toSubmitVals(values);
+    const submitData = new Entity()?.stringify(values) || values;
     const isUpdate = Boolean(id);
     if (isUpdate) {
       submitData.id = id;
       submitData.version = data?.version;
+    }
+    if (startProcess) {
+      submitData.startProcess = true;
     }
     await request({
       url: isUpdate ? '/sink/update' : '/sink/save',
@@ -187,26 +161,47 @@ const Comp: React.FC<DetailModalProps> = ({ inlongGroupId, id, ...modalProps }) 
       data: {
         ...submitData,
         inlongGroupId,
+        inlongStreamId,
       },
     });
     modalProps?.onOk(submitData);
     message.success(t('basic.OperatingSuccess'));
   };
 
-  const onValuesChangeHandler = (...rest) => {
-    setCurrentValues(prev => ({ ...prev, ...rest[1] }));
-  };
-
   return (
-    <Modal title={SinksMap[sinkType]?.label} width={1200} {...modalProps} onOk={onOk}>
-      <FormGenerator
-        labelCol={{ span: 4 }}
-        wrapperCol={{ span: 20 }}
-        content={formContent}
-        form={form}
-        allValues={data}
-        onValuesChange={onValuesChangeHandler}
-      />
+    <Modal
+      title={id ? t('pages.GroupDetail.Sink.Edit') : t('pages.GroupDetail.Sink.New')}
+      width={1200}
+      {...modalProps}
+      footer={[
+        <Button key="cancel" onClick={modalProps.onCancel}>
+          {t('pages.GroupDetail.Sink.Cancel')}
+        </Button>,
+        <Button key="save" type="primary" onClick={() => onOk(false)}>
+          {t('pages.GroupDetail.Sink.Save')}
+        </Button>,
+        groupData?.status === 130 && id && (
+          <Button key="run" type="primary" onClick={() => onOk(true)}>
+            {t('pages.GroupDetail.Sink.SaveAndRefresh')}
+          </Button>
+        ),
+      ]}
+    >
+      {loading ? (
+        <Skeleton active />
+      ) : (
+        <FormGenerator
+          labelCol={{ flex: '0 0 200px' }}
+          wrapperCol={{ flex: 1 }}
+          col={12}
+          content={formContent}
+          form={form}
+          initialValues={id ? data : { inlongGroupId }}
+          onValuesChange={(c, values) => {
+            setSinkType(values.sinkType);
+          }}
+        />
+      )}
     </Modal>
   );
 };

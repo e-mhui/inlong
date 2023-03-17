@@ -20,8 +20,12 @@ package org.apache.inlong.sort.parser.impl;
 import com.google.common.base.Preconditions;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.table.api.TableEnvironment;
+import org.apache.inlong.sort.configuration.Constants;
 import org.apache.inlong.sort.formats.base.TableFormatUtils;
+import org.apache.inlong.sort.formats.common.ArrayFormatInfo;
 import org.apache.inlong.sort.formats.common.FormatInfo;
+import org.apache.inlong.sort.formats.common.MapFormatInfo;
+import org.apache.inlong.sort.formats.common.RowFormatInfo;
 import org.apache.inlong.sort.function.EncryptFunction;
 import org.apache.inlong.sort.function.JsonGetterFunction;
 import org.apache.inlong.sort.function.RegexpReplaceFirstFunction;
@@ -39,6 +43,7 @@ import org.apache.inlong.sort.protocol.enums.FilterStrategy;
 import org.apache.inlong.sort.protocol.node.ExtractNode;
 import org.apache.inlong.sort.protocol.node.LoadNode;
 import org.apache.inlong.sort.protocol.node.Node;
+import org.apache.inlong.sort.protocol.node.extract.MongoExtractNode;
 import org.apache.inlong.sort.protocol.node.load.HbaseLoadNode;
 import org.apache.inlong.sort.protocol.node.transform.DistinctNode;
 import org.apache.inlong.sort.protocol.node.transform.TransformNode;
@@ -64,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Flink sql parse handler
@@ -73,6 +79,7 @@ public class FlinkSqlParser implements Parser {
 
     private static final Logger log = LoggerFactory.getLogger(FlinkSqlParser.class);
 
+    public static final String SOURCE_MULTIPLE_ENABLE_KEY = "source.multiple.enable";
     private final TableEnvironment tableEnv;
     private final GroupInfo groupInfo;
     private final Set<String> hasParsedSet = new HashSet<>();
@@ -149,7 +156,7 @@ public class FlinkSqlParser implements Parser {
         Preconditions.checkNotNull(streamInfo.getRelations(), "relations is null");
         Preconditions.checkState(!streamInfo.getRelations().isEmpty(), "relations is empty");
         log.info("start parse stream, streamId:{}", streamInfo.getStreamId());
-        // Inject the `inlong.metric` for ExtractNode or LoadNode
+        // Inject the metric option for ExtractNode or LoadNode
         injectInlongMetric(streamInfo);
         Map<String, Node> nodeMap = new HashMap<>(streamInfo.getNodes().size());
         streamInfo.getNodes().forEach(s -> {
@@ -169,7 +176,7 @@ public class FlinkSqlParser implements Parser {
     }
 
     /**
-     * Inject the `inlong.metric` for ExtractNode or LoadNode
+     * Inject the metric option for ExtractNode or LoadNode
      *
      * @param streamInfo The encapsulation of nodes and node relations
      */
@@ -183,16 +190,19 @@ public class FlinkSqlParser implements Parser {
                 } else if (node instanceof ExtractNode) {
                     ((ExtractNode) node).setProperties(properties);
                 } else {
-                    throw new UnsupportedOperationException(String.format("Unsupported inlong metric for: %s",
-                            node.getClass().getSimpleName()));
+                    throw new UnsupportedOperationException(String.format(
+                            "Unsupported inlong group stream node for: %s", node.getClass().getSimpleName()));
                 }
             }
-            properties.put(InlongMetric.METRIC_KEY,
-                    String.format(InlongMetric.METRIC_VALUE_FORMAT, groupInfo.getGroupId(),
-                            streamInfo.getStreamId(), node.getId()));
-            if (StringUtils.isNotEmpty(groupInfo.getProperties().get(InlongMetric.AUDIT_KEY))) {
-                properties.put(InlongMetric.AUDIT_KEY,
-                        groupInfo.getProperties().get(InlongMetric.AUDIT_KEY));
+            properties.put(Constants.METRICS_LABELS.key(),
+                    Stream.of(Constants.GROUP_ID + "=" + groupInfo.getGroupId(),
+                            Constants.STREAM_ID + "=" + streamInfo.getStreamId(),
+                            Constants.NODE_ID + "=" + node.getId())
+                            .collect(Collectors.joining("&")));
+            // METRICS_AUDIT_PROXY_HOSTS depends on INLONG_GROUP_STREAM_NODE
+            if (StringUtils.isNotEmpty(groupInfo.getProperties().get(Constants.METRICS_AUDIT_PROXY_HOSTS.key()))) {
+                properties.put(Constants.METRICS_AUDIT_PROXY_HOSTS.key(),
+                        groupInfo.getProperties().get(Constants.METRICS_AUDIT_PROXY_HOSTS.key()));
             }
         });
     }
@@ -216,11 +226,34 @@ public class FlinkSqlParser implements Parser {
                 "relation must have at least one output node");
         relation.getOutputs().forEach(s -> {
             Preconditions.checkNotNull(s, "node id in outputs is null");
-            Node node = nodeMap.get(s);
-            Preconditions.checkNotNull(node, "can not find any node by node id " + s);
-            parseNode(node, relation, nodeMap, relationMap);
+            Node outputNode = nodeMap.get(s);
+            Preconditions.checkNotNull(outputNode, "can not find any node by node id " + s);
+            parseInputNodes(relation, nodeMap, relationMap);
+            parseSingleNode(outputNode, relation, nodeMap);
+            // for Load node we need to generate insert sql
+            if (outputNode instanceof LoadNode) {
+                insertSqls.add(genLoadNodeInsertSql((LoadNode) outputNode, relation, nodeMap));
+            }
         });
         log.info("parse node relation success, relation:{}", relation);
+    }
+
+    /**
+     * parse the input nodes corresponding to the output node
+     * @param relation Define relations between nodes, it also shows the data flow
+     * @param nodeMap Store the mapping relation between node id and node
+     * @param relationMap Store the mapping relation between node id and relation
+     */
+    private void parseInputNodes(NodeRelation relation, Map<String, Node> nodeMap,
+            Map<String, NodeRelation> relationMap) {
+        for (String upstreamNodeId : relation.getInputs()) {
+            if (!hasParsedSet.contains(upstreamNodeId)) {
+                Node upstreamNode = nodeMap.get(upstreamNodeId);
+                Preconditions.checkNotNull(upstreamNode,
+                        "can not find any node by node id " + upstreamNodeId);
+                parseSingleNode(upstreamNode, relationMap.get(upstreamNodeId), nodeMap);
+            }
+        }
     }
 
     private void registerTableSql(Node node, String sql) {
@@ -236,15 +269,13 @@ public class FlinkSqlParser implements Parser {
     }
 
     /**
-     * Parse a node and recursively resolve its dependent nodes
+     * Parse a single node and generate the corresponding sql
      *
      * @param node The abstract of extract, transform, load
      * @param relation Define relations between nodes, it also shows the data flow
      * @param nodeMap store the mapping relation between node id and node
-     * @param relationMap Store the mapping relation between node id and relation
      */
-    private void parseNode(Node node, NodeRelation relation, Map<String, Node> nodeMap,
-            Map<String, NodeRelation> relationMap) {
+    private void parseSingleNode(Node node, NodeRelation relation, Map<String, Node> nodeMap) {
         if (hasParsedSet.contains(node.getId())) {
             log.warn("the node has already been parsed, node id:{}", node.getId());
             return;
@@ -257,22 +288,10 @@ public class FlinkSqlParser implements Parser {
             hasParsedSet.add(node.getId());
         } else {
             Preconditions.checkNotNull(relation, "relation is null");
-            for (String upstreamNodeId : relation.getInputs()) {
-                if (!hasParsedSet.contains(upstreamNodeId)) {
-                    Node upstreamNode = nodeMap.get(upstreamNodeId);
-                    Preconditions.checkNotNull(upstreamNode,
-                            "can not find any node by node id " + upstreamNodeId);
-                    parseNode(upstreamNode, relationMap.get(upstreamNodeId), nodeMap, relationMap);
-                }
-            }
             if (node instanceof LoadNode) {
                 String createSql = genCreateSql(node);
                 log.info("node id:{}, create table sql:\n{}", node.getId(), createSql);
                 registerTableSql(node, createSql);
-                LoadNode loadNode = (LoadNode) node;
-                String insertSql = genLoadNodeInsertSql(loadNode, relation, nodeMap);
-                log.info("node id:{}, insert sql:\n{}", node.getId(), insertSql);
-                insertSqls.add(insertSql);
                 hasParsedSet.add(node.getId());
             } else if (node instanceof TransformNode) {
                 TransformNode transformNode = (TransformNode) node;
@@ -338,17 +357,15 @@ public class FlinkSqlParser implements Parser {
         // Generate mapping for output field to FieldRelation
         fieldRelations.forEach(s -> {
             // All field relations of input nodes will be the same if the node id of output field is blank.
-            // Currently, the node id in the output file is used to distinguish which field of the node in the upstream
-            // of the union the field comes from. A better way is through the upstream input field,
+            // Currently, the node id in the output field is used to distinguish which field of the node in the
+            // upstream of the union the field comes from. A better way is through the upstream input field,
             // but this abstraction does not yet have the ability to set node ids for all upstream input fields.
             // todo optimize the implementation of this block in the future
             String nodeId = s.getOutputField().getNodeId();
             if (StringUtils.isBlank(nodeId)) {
                 nodeId = unionRelation.getInputs().get(0);
             }
-            Map<String, FieldRelation> subRelationMap = fieldRelationMap
-                    .computeIfAbsent(nodeId, k -> new HashMap<>());
-            subRelationMap.put(s.getOutputField().getName(), s);
+            fieldRelationMap.computeIfAbsent(nodeId, k -> new HashMap<>()).put(s.getOutputField().getName(), s);
         });
         StringBuilder sb = new StringBuilder();
         sb.append(genUnionSingleSelectSql(unionRelation.getInputs().get(0),
@@ -630,11 +647,15 @@ public class FlinkSqlParser implements Parser {
             Map<String, FieldRelation> fieldRelationMap, StringBuilder sb) {
         for (FieldInfo field : fields) {
             FieldRelation fieldRelation = fieldRelationMap.get(field.getName());
+            FormatInfo fieldFormatInfo = field.getFormatInfo();
             if (fieldRelation == null) {
-                String targetType = TableFormatUtils.deriveLogicalType(field.getFormatInfo()).asSummaryString();
+                String targetType = TableFormatUtils.deriveLogicalType(fieldFormatInfo).asSummaryString();
                 sb.append("\n    CAST(NULL as ").append(targetType).append(") AS ").append(field.format()).append(",");
                 continue;
             }
+            boolean complexType = fieldFormatInfo instanceof RowFormatInfo
+                    || fieldFormatInfo instanceof ArrayFormatInfo
+                    || fieldFormatInfo instanceof MapFormatInfo;
             FunctionParam inputField = fieldRelation.getInputField();
             if (inputField instanceof FieldInfo) {
                 FieldInfo fieldInfo = (FieldInfo) inputField;
@@ -644,10 +665,10 @@ public class FlinkSqlParser implements Parser {
                         && outputField != null
                         && outputField.getFormatInfo() != null
                         && outputField.getFormatInfo().getTypeInfo().equals(formatInfo.getTypeInfo());
-                if (sameType || field.getFormatInfo() == null) {
+                if (complexType || sameType || fieldFormatInfo == null) {
                     sb.append("\n    ").append(inputField.format()).append(" AS ").append(field.format()).append(",");
                 } else {
-                    String targetType = TableFormatUtils.deriveLogicalType(field.getFormatInfo()).asSummaryString();
+                    String targetType = TableFormatUtils.deriveLogicalType(fieldFormatInfo).asSummaryString();
                     sb.append("\n    CAST(").append(inputField.format()).append(" as ")
                             .append(targetType).append(") AS ").append(field.format()).append(",");
                 }
@@ -739,8 +760,9 @@ public class FlinkSqlParser implements Parser {
         }
         StringBuilder sb = new StringBuilder("CREATE TABLE `");
         sb.append(node.genTableName()).append("`(\n");
-        sb.append(genPrimaryKey(node.getPrimaryKey()));
-        sb.append(parseFields(node.getFields(), node));
+        String filterPrimaryKey = getFilterPrimaryKey(node);
+        sb.append(genPrimaryKey(node.getPrimaryKey(), filterPrimaryKey));
+        sb.append(parseFields(node.getFields(), node, filterPrimaryKey));
         if (node instanceof ExtractNode) {
             ExtractNode extractNode = (ExtractNode) node;
             if (extractNode.getWatermarkField() != null) {
@@ -754,6 +776,19 @@ public class FlinkSqlParser implements Parser {
         }
         sb.append(parseOptions(node.tableOptions()));
         return sb.toString();
+    }
+
+    /**
+     * Get filter PrimaryKey for Mongo when multi-sink mode
+     */
+    private String getFilterPrimaryKey(Node node) {
+        if (node instanceof MongoExtractNode) {
+            if (null != node.getProperties().get(SOURCE_MULTIPLE_ENABLE_KEY)
+                    && node.getProperties().get(SOURCE_MULTIPLE_ENABLE_KEY).equals("true")) {
+                return node.getPrimaryKey();
+            }
+        }
+        return null;
     }
 
     /**
@@ -854,11 +889,15 @@ public class FlinkSqlParser implements Parser {
      *
      * @param fields The fields defined in node
      * @param node The abstract of extract, transform, load
+     * @param filterPrimaryKey filter PrimaryKey, use for mongo
      * @return Field formats in select sql
      */
-    private String parseFields(List<FieldInfo> fields, Node node) {
+    private String parseFields(List<FieldInfo> fields, Node node, String filterPrimaryKey) {
         StringBuilder sb = new StringBuilder();
         for (FieldInfo field : fields) {
+            if (StringUtils.isNotBlank(filterPrimaryKey) && field.getName().equals(filterPrimaryKey)) {
+                continue;
+            }
             sb.append("    `").append(field.getName()).append("` ");
             if (field instanceof MetaFieldInfo) {
                 if (!(node instanceof Metadata)) {
@@ -887,10 +926,13 @@ public class FlinkSqlParser implements Parser {
      * Generate primary key format in sql
      *
      * @param primaryKey The primary key of table
+     * @param filterPrimaryKey filter PrimaryKey, use for mongo
      * @return Primary key format in sql
      */
-    private String genPrimaryKey(String primaryKey) {
-        if (StringUtils.isNotBlank(primaryKey)) {
+    private String genPrimaryKey(String primaryKey, String filterPrimaryKey) {
+        boolean checkPrimaryKeyFlag = StringUtils.isNotBlank(primaryKey)
+                && (StringUtils.isBlank(filterPrimaryKey) || !primaryKey.equals(filterPrimaryKey));
+        if (checkPrimaryKeyFlag) {
             primaryKey = String.format("    PRIMARY KEY (%s) NOT ENFORCED,\n",
                     StringUtils.join(formatFields(primaryKey.split(",")), ","));
         } else {

@@ -17,7 +17,6 @@
 
 package org.apache.inlong.manager.client.api.service;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.inlong.manager.pojo.cluster.BindTagRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterInfo;
 import org.apache.inlong.manager.pojo.cluster.ClusterNodeRequest;
@@ -27,13 +26,18 @@ import org.apache.inlong.manager.pojo.cluster.ClusterRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagPageRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagResponse;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.common.Response;
+import org.apache.inlong.manager.pojo.common.UpdateResult;
 import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.DELETE;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
 import retrofit2.http.Path;
+import retrofit2.http.Query;
+
+import java.util.List;
 
 public interface InlongClusterApi {
 
@@ -44,7 +48,7 @@ public interface InlongClusterApi {
     Call<Response<ClusterTagResponse>> getTag(@Path("id") Integer id);
 
     @POST("cluster/tag/list")
-    Call<Response<PageInfo<ClusterTagResponse>>> listTag(@Body ClusterTagPageRequest request);
+    Call<Response<PageResult<ClusterTagResponse>>> listTag(@Body ClusterTagPageRequest request);
 
     @POST("cluster/tag/update")
     Call<Response<Boolean>> updateTag(@Body ClusterTagRequest request);
@@ -59,16 +63,22 @@ public interface InlongClusterApi {
     Call<Response<ClusterInfo>> get(@Path("id") Integer id);
 
     @POST("cluster/list")
-    Call<Response<ClusterInfo>> list(@Body ClusterPageRequest request);
+    Call<Response<PageResult<ClusterInfo>>> list(@Body ClusterPageRequest request);
 
     @POST("cluster/update")
     Call<Response<Boolean>> update(@Body ClusterRequest request);
+
+    @POST("cluster/updateByKey")
+    Call<Response<UpdateResult>> updateByKey(@Body ClusterRequest request);
 
     @POST("cluster/bindTag")
     Call<Response<Boolean>> bindTag(@Body BindTagRequest request);
 
     @DELETE("cluster/delete/{id}")
     Call<Response<Boolean>> delete(@Path("id") Integer id);
+
+    @DELETE("cluster/deleteByKey")
+    Call<Response<Boolean>> deleteByKey(@Query("name") String name, @Query("type") String type);
 
     @POST("cluster/node/save")
     Call<Response<Integer>> saveNode(@Body ClusterNodeRequest request);
@@ -77,7 +87,11 @@ public interface InlongClusterApi {
     Call<Response<ClusterNodeResponse>> getNode(@Path("id") Integer id);
 
     @POST("cluster/node/list")
-    Call<Response<PageInfo<ClusterNodeResponse>>> listNode(@Body ClusterPageRequest request);
+    Call<Response<PageResult<ClusterNodeResponse>>> listNode(@Body ClusterPageRequest request);
+
+    @GET("cluster/node/listByGroupId")
+    Call<Response<List<ClusterNodeResponse>>> listNodeByGroupId(@Query("inlongGroupId") String inlongGroupId,
+            @Query("clusterType") String clusterType, @Query("protocolType") String protocolType);
 
     @POST("cluster/node/update")
     Call<Response<Boolean>> updateNode(@Body ClusterNodeRequest request);

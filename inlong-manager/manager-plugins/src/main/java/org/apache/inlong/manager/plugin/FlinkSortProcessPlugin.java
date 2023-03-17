@@ -34,7 +34,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Plugin of flink sort process.
+ * Plugin of Flink Sort process.
  */
 @Slf4j
 public class FlinkSortProcessPlugin implements ProcessPlugin {
@@ -57,4 +57,5 @@ public class FlinkSortProcessPlugin implements ProcessPlugin {
         listeners.add(new StartupStreamListener());
         return listeners;
     }
+
 }

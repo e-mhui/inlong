@@ -32,7 +32,7 @@ import org.apache.flume.sink.AbstractSink;
 import org.apache.inlong.audit.base.HighPriorityThreadFactory;
 import org.apache.inlong.audit.consts.ConfigConstants;
 import org.apache.inlong.audit.utils.FailoverChannelProcessorHolder;
-import org.apache.inlong.audit.utils.NetworkUtils;
+import org.apache.inlong.common.util.NetworkUtils;
 import org.apache.inlong.tubemq.client.config.TubeClientConfig;
 import org.apache.inlong.tubemq.client.exception.TubeClientException;
 import org.apache.inlong.tubemq.client.factory.TubeMultiSessionFactory;
@@ -100,7 +100,7 @@ public class TubeSink extends AbstractSink implements Configurable {
         /*
          * stat tube performance
          */
-        logger.info("tubePerformanceTask!!!!!!");
+        logger.info("init tubePerformanceTask");
         scheduledExecutorService.scheduleWithFixedDelay(tubePerformanceTask, 0L,
                 PRINT_INTERVAL, TimeUnit.SECONDS);
     }
@@ -144,7 +144,7 @@ public class TubeSink extends AbstractSink implements Configurable {
 
     @Override
     public synchronized void start() {
-        logger.info("tube sink starting...");
+        logger.info("tube sink starting");
         try {
             createConnection();
         } catch (FlumeException e) {
@@ -176,7 +176,7 @@ public class TubeSink extends AbstractSink implements Configurable {
 
     @Override
     public synchronized void stop() {
-        logger.info("tubesink stopping");
+        logger.info("tube sink stopping");
         destroyConnection();
         this.canTake = false;
         int waitCount = 0;
@@ -209,7 +209,7 @@ public class TubeSink extends AbstractSink implements Configurable {
 
     @Override
     public Status process() throws EventDeliveryException {
-        logger.debug("process......");
+        logger.info("tube sink processing");
         if (!this.canTake) {
             return Status.BACKOFF;
         }
@@ -309,7 +309,7 @@ public class TubeSink extends AbstractSink implements Configurable {
      * Send message of success.
      */
     public void handleMessageSendSuccess(EventStat es) {
-        //Statistics tube performance
+        // Statistics tube performance
         totalTubeSuccSendCnt.incrementAndGet();
         totalTubeSuccSendSize.addAndGet(es.getEvent().getBody().length);
 
@@ -322,9 +322,10 @@ public class TubeSink extends AbstractSink implements Configurable {
             lastSuccessSendCnt.set(nowCnt);
             t2 = System.currentTimeMillis();
             logger.info("tubesink {}, succ put {} events to tube,"
-                    + " in the past {} millsec", new Object[]{
-                    getName(), (nowCnt - oldCnt), (t2 - t1)
-            });
+                    + " in the past {} millsec",
+                    new Object[]{
+                            getName(), (nowCnt - oldCnt), (t2 - t1)
+                    });
             t1 = t2;
         }
 
@@ -561,7 +562,7 @@ public class TubeSink extends AbstractSink implements Configurable {
                             try {
                                 Thread.sleep(100);
                             } catch (InterruptedException e) {
-                                //ignore..
+                                // ignore..
                             }
                         }
                     }

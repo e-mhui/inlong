@@ -23,7 +23,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.inlong.common.enums.DataTypeEnum;
-import org.apache.inlong.manager.common.consts.InlongConstants;
 import org.apache.inlong.manager.common.consts.SourceType;
 import org.apache.inlong.manager.common.enums.ClusterType;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
@@ -33,6 +32,7 @@ import org.apache.inlong.manager.dao.entity.StreamSourceEntity;
 import org.apache.inlong.manager.pojo.cluster.ClusterInfo;
 import org.apache.inlong.manager.pojo.cluster.pulsar.PulsarClusterInfo;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
+import org.apache.inlong.manager.pojo.group.pulsar.InlongPulsarInfo;
 import org.apache.inlong.manager.pojo.source.SourceRequest;
 import org.apache.inlong.manager.pojo.source.StreamSource;
 import org.apache.inlong.manager.pojo.source.kafka.KafkaSource;
@@ -85,7 +85,8 @@ public class PulsarSourceOperator extends AbstractSourceOperator {
             PulsarSourceDTO dto = PulsarSourceDTO.getFromRequest(sourceRequest);
             targetEntity.setExtParams(objectMapper.writeValueAsString(dto));
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.SOURCE_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SOURCE_INFO_INCORRECT,
+                    String.format("serialize extParams of Pulsar SourceDTO failure: %s", e.getMessage()));
         }
     }
 
@@ -112,11 +113,15 @@ public class PulsarSourceOperator extends AbstractSourceOperator {
         PulsarClusterInfo pulsarCluster = (PulsarClusterInfo) clusterInfo;
         String adminUrl = pulsarCluster.getAdminUrl();
         String serviceUrl = pulsarCluster.getUrl();
-        String tenant = StringUtils.isEmpty(pulsarCluster.getTenant())
-                ? InlongConstants.DEFAULT_PULSAR_TENANT : pulsarCluster.getTenant();
+
+        // First get the tenant from the InlongGroup, and then get it from the PulsarCluster.
+        String tenant = ((InlongPulsarInfo) groupInfo).getTenant();
+        if (StringUtils.isBlank(tenant)) {
+            tenant = pulsarCluster.getTenant();
+        }
 
         Map<String, List<StreamSource>> sourceMap = Maps.newHashMap();
-        streamInfos.forEach(streamInfo -> {
+        for (InlongStreamInfo streamInfo : streamInfos) {
             PulsarSource pulsarSource = new PulsarSource();
             String streamId = streamInfo.getInlongStreamId();
             pulsarSource.setSourceName(streamId);
@@ -126,6 +131,12 @@ public class PulsarSourceOperator extends AbstractSourceOperator {
             pulsarSource.setAdminUrl(adminUrl);
             pulsarSource.setServiceUrl(serviceUrl);
             pulsarSource.setInlongComponent(true);
+            if (StringUtils.isNotBlank(streamInfo.getDataType())) {
+                String serializationType = DataTypeEnum.forType(streamInfo.getDataType()).getType();
+                pulsarSource.setSerializationType(serializationType);
+            }
+            pulsarSource.setWrapWithInlongMsg(streamInfo.getWrapWithInlongMsg());
+            pulsarSource.setIgnoreParseError(streamInfo.getIgnoreParseError());
 
             // set the token info
             if (StringUtils.isNotBlank(pulsarCluster.getToken())) {
@@ -142,6 +153,7 @@ public class PulsarSourceOperator extends AbstractSourceOperator {
                         && StringUtils.isNotEmpty(sourceInfo.getSerializationType())) {
                     pulsarSource.setSerializationType(sourceInfo.getSerializationType());
                 }
+                // currently, only reuse the primary key from Kafka source
                 if (SourceType.KAFKA.equals(sourceInfo.getSourceType())) {
                     pulsarSource.setPrimaryKey(((KafkaSource) sourceInfo).getPrimaryKey());
                 }
@@ -149,12 +161,18 @@ public class PulsarSourceOperator extends AbstractSourceOperator {
 
             // if the SerializationType is still null, set it to the CSV
             if (StringUtils.isEmpty(pulsarSource.getSerializationType())) {
-                pulsarSource.setSerializationType(DataTypeEnum.CSV.getName());
+                pulsarSource.setSerializationType(DataTypeEnum.CSV.getType());
+            }
+            if (DataTypeEnum.CSV.getType().equalsIgnoreCase(pulsarSource.getSerializationType())) {
+                pulsarSource.setDataSeparator(streamInfo.getDataSeparator());
+                if (StringUtils.isEmpty(pulsarSource.getDataSeparator())) {
+                    pulsarSource.setDataSeparator(String.valueOf((int) ','));
+                }
             }
             pulsarSource.setScanStartupMode(PulsarScanStartupMode.EARLIEST.getValue());
             pulsarSource.setFieldList(streamInfo.getFieldList());
             sourceMap.computeIfAbsent(streamId, key -> Lists.newArrayList()).add(pulsarSource);
-        });
+        }
 
         return sourceMap;
     }

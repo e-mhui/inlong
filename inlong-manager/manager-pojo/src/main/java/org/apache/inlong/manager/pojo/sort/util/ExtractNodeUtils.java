@@ -25,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.inlong.common.enums.DataTypeEnum;
 import org.apache.inlong.manager.common.consts.SourceType;
 import org.apache.inlong.manager.pojo.source.StreamSource;
+import org.apache.inlong.manager.pojo.source.hudi.HudiSource;
 import org.apache.inlong.manager.pojo.source.kafka.KafkaOffset;
 import org.apache.inlong.manager.pojo.source.kafka.KafkaSource;
 import org.apache.inlong.manager.pojo.source.mongodb.MongoDBSource;
@@ -32,20 +33,28 @@ import org.apache.inlong.manager.pojo.source.mysql.MySQLBinlogSource;
 import org.apache.inlong.manager.pojo.source.oracle.OracleSource;
 import org.apache.inlong.manager.pojo.source.postgresql.PostgreSQLSource;
 import org.apache.inlong.manager.pojo.source.pulsar.PulsarSource;
+import org.apache.inlong.manager.pojo.source.redis.RedisLookupOptions;
+import org.apache.inlong.manager.pojo.source.redis.RedisSource;
 import org.apache.inlong.manager.pojo.source.sqlserver.SQLServerSource;
 import org.apache.inlong.manager.pojo.source.tubemq.TubeMQSource;
 import org.apache.inlong.manager.pojo.stream.StreamField;
 import org.apache.inlong.sort.protocol.FieldInfo;
+import org.apache.inlong.sort.protocol.LookupOptions;
+import org.apache.inlong.sort.protocol.constant.HudiConstant.CatalogType;
 import org.apache.inlong.sort.protocol.constant.OracleConstant.ScanStartUpMode;
 import org.apache.inlong.sort.protocol.enums.KafkaScanStartupMode;
 import org.apache.inlong.sort.protocol.enums.PulsarScanStartupMode;
+import org.apache.inlong.sort.protocol.enums.RedisCommand;
+import org.apache.inlong.sort.protocol.enums.RedisMode;
 import org.apache.inlong.sort.protocol.node.ExtractNode;
+import org.apache.inlong.sort.protocol.node.extract.HudiExtractNode;
 import org.apache.inlong.sort.protocol.node.extract.KafkaExtractNode;
 import org.apache.inlong.sort.protocol.node.extract.MongoExtractNode;
 import org.apache.inlong.sort.protocol.node.extract.MySqlExtractNode;
 import org.apache.inlong.sort.protocol.node.extract.OracleExtractNode;
 import org.apache.inlong.sort.protocol.node.extract.PostgresExtractNode;
 import org.apache.inlong.sort.protocol.node.extract.PulsarExtractNode;
+import org.apache.inlong.sort.protocol.node.extract.RedisExtractNode;
 import org.apache.inlong.sort.protocol.node.extract.SqlServerExtractNode;
 import org.apache.inlong.sort.protocol.node.extract.TubeMQExtractNode;
 import org.apache.inlong.sort.protocol.node.format.AvroFormat;
@@ -55,6 +64,7 @@ import org.apache.inlong.sort.protocol.node.format.DebeziumJsonFormat;
 import org.apache.inlong.sort.protocol.node.format.Format;
 import org.apache.inlong.sort.protocol.node.format.InLongMsgFormat;
 import org.apache.inlong.sort.protocol.node.format.JsonFormat;
+import org.apache.inlong.sort.protocol.node.format.RawFormat;
 
 import java.util.List;
 import java.util.Map;
@@ -96,6 +106,10 @@ public class ExtractNodeUtils {
                 return createExtractNode((MongoDBSource) sourceInfo);
             case SourceType.TUBEMQ:
                 return createExtractNode((TubeMQSource) sourceInfo);
+            case SourceType.REDIS:
+                return createExtractNode((RedisSource) sourceInfo);
+            case SourceType.HUDI:
+                return createExtractNode((HudiSource) sourceInfo);
             default:
                 throw new IllegalArgumentException(
                         String.format("Unsupported sourceType=%s to create extractNode", sourceType));
@@ -123,19 +137,14 @@ public class ExtractNodeUtils {
         final List<String> tableNames = Splitter.on(",").splitToList(tables);
         List<FieldInfo> fieldInfos = parseFieldInfos(binlogSource.getFieldList(), binlogSource.getSourceName());
         final String serverTimeZone = binlogSource.getServerTimezone();
-        boolean incrementalSnapshotEnabled = true;
 
         // TODO Needs to be configurable for those parameters
         Map<String, String> properties = parseProperties(binlogSource.getProperties());
         if (binlogSource.isAllMigration()) {
             // Unique properties when migrate all tables in database
-            incrementalSnapshotEnabled = false;
             properties.put("migrate-all", "true");
         }
-        if (StringUtils.isEmpty(primaryKey)) {
-            incrementalSnapshotEnabled = false;
-            properties.put("scan.incremental.snapshot.enabled", "false");
-        }
+
         return new MySqlExtractNode(binlogSource.getSourceName(),
                 binlogSource.getSourceName(),
                 fieldInfos,
@@ -149,7 +158,7 @@ public class ExtractNodeUtils {
                 database,
                 port,
                 serverId,
-                incrementalSnapshotEnabled,
+                true,
                 serverTimeZone);
     }
 
@@ -163,27 +172,13 @@ public class ExtractNodeUtils {
         List<FieldInfo> fieldInfos = parseFieldInfos(kafkaSource.getFieldList(), kafkaSource.getSourceName());
         String topic = kafkaSource.getTopic();
         String bootstrapServers = kafkaSource.getBootstrapServers();
-        Format format;
-        DataTypeEnum dataType = DataTypeEnum.forName(kafkaSource.getSerializationType());
-        switch (dataType) {
-            case CSV:
-                format = new CsvFormat();
-                break;
-            case AVRO:
-                format = new AvroFormat();
-                break;
-            case JSON:
-                format = new JsonFormat();
-                break;
-            case CANAL:
-                format = new CanalJsonFormat();
-                break;
-            case DEBEZIUM_JSON:
-                format = new DebeziumJsonFormat();
-                break;
-            default:
-                throw new IllegalArgumentException(String.format("Unsupported dataType=%s for kafka source", dataType));
-        }
+
+        Format format = parsingFormat(
+                kafkaSource.getSerializationType(),
+                kafkaSource.isWrapWithInlongMsg(),
+                kafkaSource.getDataSeparator(),
+                kafkaSource.isIgnoreParseErrors());
+
         KafkaOffset kafkaOffset = KafkaOffset.forName(kafkaSource.getAutoOffsetReset());
         KafkaScanStartupMode startupMode;
         switch (kafkaOffset) {
@@ -193,6 +188,9 @@ public class ExtractNodeUtils {
             case SPECIFIC:
                 startupMode = KafkaScanStartupMode.SPECIFIC_OFFSETS;
                 break;
+            case TIMESTAMP_MILLIS:
+                startupMode = KafkaScanStartupMode.TIMESTAMP_MILLIS;
+                break;
             case LATEST:
             default:
                 startupMode = KafkaScanStartupMode.LATEST_OFFSET;
@@ -201,6 +199,7 @@ public class ExtractNodeUtils {
         String groupId = kafkaSource.getGroupId();
         Map<String, String> properties = parseProperties(kafkaSource.getProperties());
         String partitionOffset = kafkaSource.getPartitionOffsets();
+        String scanTimestampMillis = kafkaSource.getTimestampMillis();
         return new KafkaExtractNode(kafkaSource.getSourceName(),
                 kafkaSource.getSourceName(),
                 fieldInfos,
@@ -212,8 +211,8 @@ public class ExtractNodeUtils {
                 startupMode,
                 primaryKey,
                 groupId,
-                partitionOffset
-        );
+                partitionOffset,
+                scanTimestampMillis);
     }
 
     /**
@@ -227,32 +226,11 @@ public class ExtractNodeUtils {
         String fullTopicName =
                 pulsarSource.getTenant() + "/" + pulsarSource.getNamespace() + "/" + pulsarSource.getTopic();
 
-        Format format;
-        DataTypeEnum dataType = DataTypeEnum.forName(pulsarSource.getSerializationType());
-        switch (dataType) {
-            case CSV:
-                format = new CsvFormat();
-                break;
-            case AVRO:
-                format = new AvroFormat();
-                break;
-            case JSON:
-                format = new JsonFormat();
-                break;
-            case CANAL:
-                format = new CanalJsonFormat();
-                break;
-            case DEBEZIUM_JSON:
-                format = new DebeziumJsonFormat();
-                break;
-            default:
-                throw new IllegalArgumentException(
-                        String.format("Unsupported dataType=%s for pulsar source", dataType));
-        }
-        if (pulsarSource.isInlongComponent()) {
-            Format innerFormat = format;
-            format = new InLongMsgFormat(innerFormat, false);
-        }
+        Format format = parsingFormat(pulsarSource.getSerializationType(),
+                pulsarSource.isWrapWithInlongMsg(),
+                pulsarSource.getDataSeparator(),
+                pulsarSource.isIgnoreParseError());
+
         PulsarScanStartupMode startupMode = PulsarScanStartupMode.forName(pulsarSource.getScanStartupMode());
         final String primaryKey = pulsarSource.getPrimaryKey();
         final String serviceUrl = pulsarSource.getServiceUrl();
@@ -280,12 +258,22 @@ public class ExtractNodeUtils {
     public static PostgresExtractNode createExtractNode(PostgreSQLSource postgreSQLSource) {
         List<FieldInfo> fieldInfos = parseFieldInfos(postgreSQLSource.getFieldList(), postgreSQLSource.getSourceName());
         Map<String, String> properties = parseProperties(postgreSQLSource.getProperties());
-        return new PostgresExtractNode(postgreSQLSource.getSourceName(), postgreSQLSource.getSourceName(),
-                fieldInfos, null, properties, postgreSQLSource.getPrimaryKey(),
-                postgreSQLSource.getTableNameList(), postgreSQLSource.getHostname(),
-                postgreSQLSource.getUsername(), postgreSQLSource.getPassword(),
-                postgreSQLSource.getDatabase(), postgreSQLSource.getSchema(),
-                postgreSQLSource.getPort(), postgreSQLSource.getDecodingPluginName());
+        return new PostgresExtractNode(postgreSQLSource.getSourceName(),
+                postgreSQLSource.getSourceName(),
+                fieldInfos,
+                null,
+                properties,
+                postgreSQLSource.getPrimaryKey(),
+                postgreSQLSource.getTableNameList(),
+                postgreSQLSource.getHostname(),
+                postgreSQLSource.getUsername(),
+                postgreSQLSource.getPassword(),
+                postgreSQLSource.getDatabase(),
+                postgreSQLSource.getSchema(),
+                postgreSQLSource.getPort(),
+                postgreSQLSource.getDecodingPluginName(),
+                postgreSQLSource.getServerTimeZone(),
+                postgreSQLSource.getScanStartupMode());
     }
 
     /**
@@ -297,7 +285,8 @@ public class ExtractNodeUtils {
     public static OracleExtractNode createExtractNode(OracleSource source) {
         List<FieldInfo> fieldInfos = parseFieldInfos(source.getFieldList(), source.getSourceName());
         ScanStartUpMode scanStartupMode = StringUtils.isBlank(source.getScanStartupMode())
-                ? null : ScanStartUpMode.forName(source.getScanStartupMode());
+                ? null
+                : ScanStartUpMode.forName(source.getScanStartupMode());
         Map<String, String> properties = parseProperties(source.getProperties());
         return new OracleExtractNode(
                 source.getSourceName(),
@@ -313,8 +302,7 @@ public class ExtractNodeUtils {
                 source.getSchemaName(),
                 source.getTableName(),
                 source.getPort(),
-                scanStartupMode
-        );
+                scanStartupMode);
     }
 
     /**
@@ -340,8 +328,7 @@ public class ExtractNodeUtils {
                 source.getDatabase(),
                 source.getSchemaName(),
                 source.getTableName(),
-                source.getServerTimezone()
-        );
+                source.getServerTimezone());
     }
 
     /**
@@ -363,8 +350,7 @@ public class ExtractNodeUtils {
                 source.getHosts(),
                 source.getUsername(),
                 source.getPassword(),
-                source.getDatabase()
-        );
+                source.getDatabase());
     }
 
     /**
@@ -387,8 +373,165 @@ public class ExtractNodeUtils {
                 source.getSerializationType(),
                 source.getGroupId(),
                 source.getSessionKey(),
-                source.getTid()
-        );
+                source.getTid());
+    }
+
+    /**
+     * Create Redis extract node
+     *
+     * @param source redis source info
+     * @return redis extract source info
+     */
+    public static RedisExtractNode createExtractNode(RedisSource source) {
+        List<FieldInfo> fieldInfos = parseFieldInfos(source.getFieldList(), source.getSourceName());
+        Map<String, String> properties = parseProperties(source.getProperties());
+        RedisMode redisMode = RedisMode.forName(source.getRedisMode());
+        switch (redisMode) {
+            case STANDALONE:
+                return new RedisExtractNode(
+                        source.getSourceName(),
+                        source.getSourceName(),
+                        fieldInfos,
+                        null,
+                        properties,
+                        source.getPrimaryKey(),
+                        RedisCommand.forName(source.getCommand()),
+                        source.getHost(),
+                        source.getPort(),
+                        source.getPassword(),
+                        source.getAdditionalKey(),
+                        source.getDatabase(),
+                        source.getTimeout(),
+                        source.getSoTimeout(),
+                        source.getMaxTotal(),
+                        source.getMaxIdle(),
+                        source.getMinIdle(),
+                        parseLookupOptions(source.getLookupOptions()));
+            case SENTINEL:
+                return new RedisExtractNode(
+                        source.getSourceName(),
+                        source.getSourceName(),
+                        fieldInfos,
+                        null,
+                        properties,
+                        source.getPrimaryKey(),
+                        RedisCommand.forName(source.getCommand()),
+                        source.getMasterName(),
+                        source.getSentinelsInfo(),
+                        source.getPassword(),
+                        source.getAdditionalKey(),
+                        source.getDatabase(),
+                        source.getTimeout(),
+                        source.getSoTimeout(),
+                        source.getMaxTotal(),
+                        source.getMaxIdle(),
+                        source.getMinIdle(),
+                        parseLookupOptions(source.getLookupOptions()));
+            case CLUSTER:
+                return new RedisExtractNode(
+                        source.getSourceName(),
+                        source.getSourceName(),
+                        fieldInfos,
+                        null,
+                        properties,
+                        source.getPrimaryKey(),
+                        RedisCommand.forName(source.getCommand()),
+                        source.getClusterNodes(),
+                        source.getPassword(),
+                        source.getAdditionalKey(),
+                        source.getDatabase(),
+                        source.getTimeout(),
+                        source.getSoTimeout(),
+                        source.getMaxTotal(),
+                        source.getMaxIdle(),
+                        source.getMinIdle(),
+                        parseLookupOptions(source.getLookupOptions()));
+            default:
+                throw new IllegalArgumentException(String.format("Unsupported redis-mode=%s for Inlong", redisMode));
+        }
+
+    }
+
+    /**
+     * Create Hudi extract node
+     *
+     * @param source hudi source info
+     * @return hudi extract source info
+     */
+    public static HudiExtractNode createExtractNode(HudiSource source) {
+        List<FieldInfo> fieldInfos = parseFieldInfos(source.getFieldList(), source.getSourceName());
+        Map<String, String> properties = parseProperties(source.getProperties());
+
+        return new HudiExtractNode(
+                source.getSourceName(),
+                source.getSourceName(),
+                fieldInfos,
+                null,
+                source.getCatalogUri(),
+                source.getWarehouse(),
+                source.getDbName(),
+                source.getTableName(),
+                CatalogType.HIVE,
+                source.getCheckIntervalInMinus(),
+                source.isReadStreamingSkipCompaction(),
+                source.getReadStartCommit(),
+                properties,
+                source.getExtList());
+    }
+
+    /**
+     * Parse format
+     *
+     * @param serializationType data serialization, support: csv, json, canal, avro, etc
+     * @param wrapWithInlongMsg whether wrap content with {@link InLongMsgFormat}
+     * @param separatorStr the separator of data content
+     * @param ignoreParseErrors whether ignore deserialization error data
+     * @return the format for serialized content
+     */
+    private static Format parsingFormat(
+            String serializationType,
+            boolean wrapWithInlongMsg,
+            String separatorStr,
+            boolean ignoreParseErrors) {
+        Format format;
+        DataTypeEnum dataType = DataTypeEnum.forType(serializationType);
+        switch (dataType) {
+            case CSV:
+                if (StringUtils.isNumeric(separatorStr)) {
+                    char dataSeparator = (char) Integer.parseInt(separatorStr);
+                    separatorStr = Character.toString(dataSeparator);
+                }
+                CsvFormat csvFormat = new CsvFormat(separatorStr);
+                csvFormat.setIgnoreParseErrors(ignoreParseErrors);
+                format = csvFormat;
+                break;
+            case AVRO:
+                format = new AvroFormat();
+                break;
+            case JSON:
+                JsonFormat jsonFormat = new JsonFormat();
+                jsonFormat.setIgnoreParseErrors(ignoreParseErrors);
+                format = jsonFormat;
+                break;
+            case CANAL:
+                format = new CanalJsonFormat();
+                break;
+            case DEBEZIUM_JSON:
+                DebeziumJsonFormat debeziumJsonFormat = new DebeziumJsonFormat();
+                debeziumJsonFormat.setIgnoreParseErrors(ignoreParseErrors);
+                format = debeziumJsonFormat;
+                break;
+            case RAW:
+                format = new RawFormat();
+                break;
+            default:
+                throw new IllegalArgumentException(String.format("Unsupported dataType=%s", dataType));
+        }
+        if (wrapWithInlongMsg) {
+            Format innerFormat = format;
+            format = new InLongMsgFormat(innerFormat, false);
+        }
+        return format;
     }
 
     /**
@@ -414,6 +557,20 @@ public class ExtractNodeUtils {
     private static Map<String, String> parseProperties(Map<String, Object> properties) {
         return properties.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toString()));
+    }
+
+    /**
+     * Parse LookupOptions
+     *
+     * @param options
+     * @return LookupOptions
+     */
+    private static LookupOptions parseLookupOptions(RedisLookupOptions options) {
+        if (options == null) {
+            return null;
+        }
+        return new LookupOptions(options.getLookupCacheMaxRows(), options.getLookupCacheTtl(),
+                options.getLookupMaxRetries(), options.getLookupAsync());
     }
 
 }

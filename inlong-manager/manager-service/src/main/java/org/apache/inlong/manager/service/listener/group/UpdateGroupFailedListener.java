@@ -19,11 +19,11 @@ package org.apache.inlong.manager.service.listener.group;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.inlong.manager.common.enums.GroupStatus;
+import org.apache.inlong.manager.common.enums.ProcessEvent;
 import org.apache.inlong.manager.pojo.workflow.form.process.GroupResourceProcessForm;
 import org.apache.inlong.manager.service.group.InlongGroupService;
 import org.apache.inlong.manager.workflow.WorkflowContext;
 import org.apache.inlong.manager.workflow.event.ListenerResult;
-import org.apache.inlong.manager.workflow.event.process.ProcessEvent;
 import org.apache.inlong.manager.workflow.event.process.ProcessEventListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -51,6 +51,7 @@ public class UpdateGroupFailedListener implements ProcessEventListener {
 
         // update inlong group status and other info
         String operator = context.getOperator();
+        // delete process failed, then change the group status to [CONFIG_FAILED]
         groupService.updateStatus(groupId, GroupStatus.CONFIG_FAILED.getCode(), operator);
         groupService.update(form.getGroupInfo().genRequest(), operator);
 

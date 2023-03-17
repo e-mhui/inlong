@@ -36,8 +36,11 @@ import org.apache.inlong.agent.db.TriggerProfileDb;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.lang.reflect.Constructor;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.apache.inlong.agent.constant.AgentConstants.AGENT_CONF_PARENT;
 import static org.apache.inlong.agent.constant.AgentConstants.DEFAULT_AGENT_CONF_PARENT;
@@ -57,6 +60,7 @@ public class AgentManager extends AbstractDaemon {
     private final HeartbeatManager heartbeatManager;
     private final ProfileFetcher fetcher;
     private final AgentConfiguration conf;
+    private final ExecutorService agentConfMonitor;
     private final Db db;
     private final LocalProfile localProfile;
     private final CommandDb commandDb;
@@ -66,17 +70,18 @@ public class AgentManager extends AbstractDaemon {
 
     public AgentManager() {
         conf = AgentConfiguration.getAgentConf();
+        agentConfMonitor = Executors.newSingleThreadExecutor();
         this.db = initDb();
         commandDb = new CommandDb(db);
         jobProfileDb = new JobProfileDb(db);
         String parentConfPath = conf.get(AGENT_CONF_PARENT, DEFAULT_AGENT_CONF_PARENT);
         localProfile = new LocalProfile(parentConfPath);
-        fetcher = initFetcher(this);
         triggerManager = new TriggerManager(this, new TriggerProfileDb(db));
         jobManager = new JobManager(this, jobProfileDb);
         taskManager = new TaskManager(this);
-        heartbeatManager = new HeartbeatManager(this);
-        taskPositionManager = TaskPositionManager.getTaskPositionManager(this);
+        fetcher = initFetcher(this);
+        heartbeatManager = HeartbeatManager.getInstance(this);
+        taskPositionManager = TaskPositionManager.getInstance(this);
         // need to be an option.
         if (conf.getBoolean(
                 AgentConstants.AGENT_ENABLE_HTTP, AgentConstants.DEFAULT_AGENT_ENABLE_HTTP)) {
@@ -93,8 +98,7 @@ public class AgentManager extends AbstractDaemon {
                     Class.forName(conf.get(AgentConstants.AGENT_FETCHER_CLASSNAME))
                             .getDeclaredConstructor(AgentManager.class);
             constructor.setAccessible(true);
-            return
-                    (ProfileFetcher) constructor.newInstance(agentManager);
+            return (ProfileFetcher) constructor.newInstance(agentManager);
         } catch (Exception ex) {
             LOGGER.warn("cannot find fetcher: ", ex);
         }
@@ -111,11 +115,38 @@ public class AgentManager extends AbstractDaemon {
             // db is a required component, so if not init correctly,
             // throw exception and stop running.
             return (Db) Class.forName(conf.get(
-                            AgentConstants.AGENT_DB_CLASSNAME, AgentConstants.DEFAULT_AGENT_DB_CLASSNAME))
+                    AgentConstants.AGENT_DB_CLASSNAME, AgentConstants.DEFAULT_AGENT_DB_CLASSNAME))
                     .newInstance();
         } catch (Exception ex) {
             throw new UnsupportedClassVersionError(ex.getMessage());
         }
+    }
+
+    private Runnable startHotConfReplace() {
+        return new Runnable() {
+
+            private long lastModifiedTime = 0L;
+
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        Thread.sleep(10 * 1000); // 10s check
+                        File file = new File(
+                                conf.getConfigLocation(AgentConfiguration.DEFAULT_CONFIG_FILE).getFile());
+                        if (!file.exists()) {
+                            continue;
+                        }
+                        if (file.lastModified() > lastModifiedTime) {
+                            conf.reloadFromLocalPropertiesFile();
+                            lastModifiedTime = file.lastModified();
+                        }
+                    } catch (InterruptedException e) {
+                        LOGGER.error("Interrupted when flush agent conf.", e);
+                    }
+                }
+            }
+        };
     }
 
     public JobManager getJobManager() {
@@ -124,6 +155,10 @@ public class AgentManager extends AbstractDaemon {
 
     public Db getDb() {
         return db;
+    }
+
+    public JobProfileDb getJobProfileDb() {
+        return jobProfileDb;
     }
 
     public ProfileFetcher getFetcher() {
@@ -160,8 +195,9 @@ public class AgentManager extends AbstractDaemon {
     @Override
     public void start() throws Exception {
         LOGGER.info("starting agent manager");
-        triggerManager.start();
+        agentConfMonitor.submit(startHotConfReplace());
         jobManager.start();
+        triggerManager.start();
         taskManager.start();
         heartbeatManager.start();
         taskPositionManager.start();
@@ -172,7 +208,7 @@ public class AgentManager extends AbstractDaemon {
                 TriggerProfile triggerProfile = TriggerProfile.parseJobProfile(profile);
                 // there is no need to store this profile in triggerDB, because
                 // this profile comes from local file.
-                triggerManager.addTrigger(triggerProfile);
+                triggerManager.restoreTrigger(triggerProfile);
             } else {
                 // job db store instance info, so it's suitable to use submitJobProfile
                 // to store instance into job db.
@@ -205,6 +241,7 @@ public class AgentManager extends AbstractDaemon {
         taskManager.stop();
         heartbeatManager.stop();
         taskPositionManager.stop();
+        agentConfMonitor.shutdown();
         this.db.close();
     }
 }

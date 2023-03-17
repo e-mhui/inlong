@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -31,6 +31,7 @@ import org.apache.inlong.tubemq.corebase.cluster.ProducerInfo;
 import org.apache.inlong.tubemq.corebase.cluster.TopicInfo;
 import org.apache.inlong.tubemq.corebase.utils.TStringUtils;
 import org.apache.inlong.tubemq.corebase.utils.Tuple2;
+import org.apache.inlong.tubemq.corebase.utils.Tuple3;
 import org.apache.inlong.tubemq.corerpc.exception.StandbyException;
 import org.apache.inlong.tubemq.server.master.TMaster;
 import org.apache.inlong.tubemq.server.master.metamanage.MetaDataService;
@@ -218,7 +219,7 @@ public class Master implements Action {
      * @return
      */
     private void innGetBrokerInfo(final HttpServletRequest req,
-                                           StringBuilder sBuilder, boolean isOldRet) {
+            StringBuilder sBuilder, boolean isOldRet) {
         Map<Integer, BrokerInfo> brokerInfoMap = null;
         BrokerRunManager brokerRunManager = master.getBrokerRunManager();
         String brokerIds = req.getParameter("ids");
@@ -234,35 +235,39 @@ public class Master implements Action {
         }
         if (brokerInfoMap != null) {
             int index = 1;
+            Tuple3<Boolean, Boolean, List<TopicInfo>> topicInfoTuple = new Tuple3<>();
             MetaDataService defMetaDataService = master.getMetaDataService();
             for (BrokerInfo broker : brokerInfoMap.values()) {
                 sBuilder.append("\n################################## ")
                         .append(index).append(". ").append(broker.toString())
                         .append(" ##################################\n");
-                List<TopicInfo> topicInfoList =
-                        brokerRunManager.getPubBrokerPushedTopicInfo(broker.getBrokerId());
+                brokerRunManager.getPubBrokerPushedTopicInfo(broker.getBrokerId(), topicInfoTuple);
                 Map<String, TopicDeployEntity> topicConfigMap =
                         defMetaDataService.getBrokerTopicConfEntitySet(broker.getBrokerId());
                 if (topicConfigMap == null) {
-                    for (TopicInfo info : topicInfoList) {
-                        sBuilder = info.toStrBuilderString(sBuilder);
+                    for (TopicInfo info : topicInfoTuple.getF2()) {
+                        sBuilder = info.toStrBuilderString(topicInfoTuple.getF0(),
+                                topicInfoTuple.getF1(), sBuilder);
                         sBuilder.append("\n");
 
                     }
                 } else {
-                    for (TopicInfo info : topicInfoList) {
+                    for (TopicInfo info : topicInfoTuple.getF2()) {
                         TopicDeployEntity bdbEntity = topicConfigMap.get(info.getTopic());
                         if (bdbEntity == null) {
-                            sBuilder = info.toStrBuilderString(sBuilder);
+                            sBuilder = info.toStrBuilderString(topicInfoTuple.getF0(),
+                                    topicInfoTuple.getF1(), sBuilder);
                             sBuilder.append("\n");
                         } else {
                             if (isOldRet) {
                                 if (bdbEntity.isValidTopicStatus()) {
-                                    sBuilder = info.toStrBuilderString(sBuilder);
+                                    sBuilder = info.toStrBuilderString(topicInfoTuple.getF0(),
+                                            topicInfoTuple.getF1(), sBuilder);
                                     sBuilder.append("\n");
                                 }
                             } else {
-                                sBuilder = info.toStrBuilderString(sBuilder);
+                                sBuilder = info.toStrBuilderString(topicInfoTuple.getF0(),
+                                        topicInfoTuple.getF1(), sBuilder);
                                 sBuilder.append(TokenConstants.SEGMENT_SEP)
                                         .append(bdbEntity.getTopicStatusId()).append("\n");
                             }

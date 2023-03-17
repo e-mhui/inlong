@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
  *  for metric data collection.
  */
 public class TrafficStatsService extends AbstractDaemonService implements TrafficService {
+
     // Maximum write wait time
     private static final long MAX_WRITING_WAIT_DLT = 5000L;
     // Statistics output log file
@@ -67,20 +68,12 @@ public class TrafficStatsService extends AbstractDaemonService implements Traffi
     }
 
     @Override
-    protected void loopProcess(long intervalMs) {
-        int befIndex;
-        while (!super.isStopped()) {
-            try {
-                Thread.sleep(intervalMs);
-                // Snapshot metric data
-                befIndex = writableIndex.getAndIncrement();
-                // Output 2 file
-                output2file(befIndex);
-            } catch (InterruptedException e) {
-                return;
-            } catch (Throwable t) {
-                //
-            }
+    protected void loopProcess(StringBuilder strBuff) {
+        try {
+            // Snapshot metric data and output data to file
+            output2file(writableIndex.getAndIncrement());
+        } catch (Throwable throwable) {
+            logger.error("[Traffic Stats] Daemon commit thread throw error ", throwable);
         }
     }
 
@@ -207,6 +200,7 @@ public class TrafficStatsService extends AbstractDaemonService implements Traffi
      * statistic dimensions and corresponding metric values
      */
     private static class WritableUnit {
+
         // Current writing thread count
         public LongOnlineCounter refCnt =
                 new LongOnlineCounter("ref_count", null);

@@ -54,7 +54,7 @@ class AuditServiceTest extends ServiceBaseTest {
         result.add(auditVO);
         Assertions.assertNotNull(result);
         // close real test for testQueryFromMySQL due to date_format function not support in h2
-//        Assertions.assertNotNull(auditService.listByCondition(request));
+        // Assertions.assertNotNull(auditService.listByCondition(request));
     }
 
     /**
@@ -63,8 +63,8 @@ class AuditServiceTest extends ServiceBaseTest {
      *
      * @throws IOException The exception may throws
      */
-//    @Test
-    public void testQueryFromElasticsearch() throws IOException {
+    // @Test
+    public void testQueryFromElasticsearch() throws Exception {
         AuditRequest request = new AuditRequest();
         request.setAuditIds(Arrays.asList("3", "4"));
         request.setInlongGroupId("g1");

@@ -17,22 +17,27 @@
  * under the License.
  */
 
-import React, { useState, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { Button, Modal, message } from 'antd';
+import { RightCircleTwoTone, DownCircleTwoTone } from '@ant-design/icons';
 import HighTable from '@/components/HighTable';
 import { defaultSize } from '@/configs/pagination';
 import { useRequest } from '@/hooks';
 import request from '@/utils/request';
 import { useTranslation } from 'react-i18next';
+import { useLoadMeta, useDefaultMeta, StreamMetaType } from '@/metas';
+import { GroupLogs } from '@/components/GroupLogs';
 import { CommonInterface } from '../common';
 import StreamItemModal from './StreamItemModal';
+import SourceSinkCard from './SourceSinkCard';
 import { getFilterFormContent } from './config';
-import { genStatusTag } from './status';
 
 type Props = CommonInterface;
 
 const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
   const { t } = useTranslation();
+
+  const { defaultValue } = useDefaultMeta('stream');
 
   const [options, setOptions] = useState({
     pageSize: defaultSize,
@@ -45,7 +50,21 @@ const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
     inlongGroupId,
   });
 
-  const { data, loading, run: getList } = useRequest(
+  const [groupLogs, setGroupLogs] = useState({
+    visible: false,
+    inlongGroupId,
+    inlongStreamId: '',
+  });
+
+  const [groupStatus, setGroupStatus] = useState();
+
+  const [expandedRowKeys, setExpandedRowKeys] = useState([]);
+
+  const {
+    data,
+    loading,
+    run: getList,
+  } = useRequest(
     {
       url: '/stream/list',
       method: 'POST',
@@ -56,8 +75,16 @@ const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
     },
     {
       refreshDeps: [options],
+      onSuccess: result => {
+        const [item] = result?.list || [];
+        setExpandedRowKeys([item?.inlongStreamId]);
+      },
     },
   );
+
+  useRequest(`/group/get/${inlongGroupId}`, {
+    onSuccess: result => setGroupStatus(result.status),
+  });
 
   const onOk = () => {
     return Promise.resolve();
@@ -75,8 +102,16 @@ const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
     }));
   };
 
-  const onEdit = ({ inlongStreamId }) => {
-    setStreamItemModal(prev => ({ ...prev, visible: true, inlongStreamId }));
+  const onEdit = record => {
+    setStreamItemModal(prev => ({ ...prev, visible: true, inlongStreamId: record.inlongStreamId }));
+  };
+
+  const openModal = record => {
+    setGroupLogs({
+      visible: true,
+      inlongGroupId: inlongGroupId,
+      inlongStreamId: record.inlongStreamId,
+    });
   };
 
   const onDelete = record => {
@@ -93,6 +128,23 @@ const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
         });
         await getList();
         message.success(t('basic.DeleteSuccess'));
+      },
+    });
+  };
+
+  const onWorkflow = record => {
+    Modal.confirm({
+      title: t('meta.Stream.ExecuteConfirm'),
+      onOk: async () => {
+        await request({
+          url: `/stream/startProcess/${inlongGroupId}/${record?.inlongStreamId}`,
+          method: 'POST',
+          params: {
+            sync: false,
+          },
+        });
+        await getList();
+        message.success(t('meta.Stream.ExecuteSuccess'));
       },
     });
   };
@@ -119,28 +171,13 @@ const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
     total: data?.total,
   };
 
-  const columns = [
-    {
-      title: 'ID',
-      dataIndex: 'inlongStreamId',
-    },
-    {
-      title: t('pages.GroupDetail.Stream.Name'),
-      dataIndex: 'name',
-    },
-    {
-      title: t('basic.Creator'),
-      dataIndex: 'creator',
-    },
-    {
-      title: t('basic.CreateTime'),
-      dataIndex: 'createTime',
-    },
-    {
-      title: t('basic.Status'),
-      dataIndex: 'status',
-      render: text => genStatusTag(text),
-    },
+  const { Entity } = useLoadMeta<StreamMetaType>('stream', defaultValue);
+
+  const entityColumns = useMemo(() => {
+    return Entity ? new Entity().renderList() : [];
+  }, [Entity]);
+
+  const columns = entityColumns?.concat([
     {
       title: t('basic.Operating'),
       dataIndex: 'action',
@@ -148,17 +185,27 @@ const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
         readonly ? (
           '-'
         ) : (
-          <>
+          <div onClick={e => e.stopPropagation()}>
             <Button type="link" onClick={() => onEdit(record)}>
               {t('basic.Edit')}
             </Button>
             <Button type="link" onClick={() => onDelete(record)}>
               {t('basic.Delete')}
             </Button>
-          </>
+            {record?.status && (record?.status === 120 || record?.status === 130) && (
+              <Button type="link" onClick={() => openModal(record)}>
+                {t('pages.GroupDashboard.config.ExecuteLog')}
+              </Button>
+            )}
+            {record?.status && (groupStatus === 120 || groupStatus === 130) && (
+              <Button type="link" onClick={() => onWorkflow(record)}>
+                {t('meta.Stream.ExecuteWorkflow')}
+              </Button>
+            )}
+          </div>
         ),
     },
-  ];
+  ]);
 
   return (
     <>
@@ -176,11 +223,23 @@ const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
         }
         table={{
           columns,
-          rowKey: 'id',
+          rowKey: 'inlongStreamId',
           dataSource: data?.list,
           pagination,
           loading,
           onChange,
+          expandRowByClick: true,
+          expandedRowKeys,
+          onExpandedRowsChange: rows => setExpandedRowKeys(rows),
+          expandedRowRender: record => (
+            <SourceSinkCard inlongGroupId={inlongGroupId} inlongStreamId={record.inlongStreamId} />
+          ),
+          expandIcon: ({ expanded, onExpand, record }) =>
+            expanded ? (
+              <DownCircleTwoTone onClick={e => onExpand(record, e)} />
+            ) : (
+              <RightCircleTwoTone onClick={e => onExpand(record, e)} />
+            ),
         }}
       />
 
@@ -192,6 +251,12 @@ const Comp = ({ inlongGroupId, readonly, mqType }: Props, ref) => {
           setStreamItemModal(prev => ({ ...prev, visible: false }));
         }}
         onCancel={() => setStreamItemModal(prev => ({ ...prev, visible: false }))}
+      />
+
+      <GroupLogs
+        {...groupLogs}
+        onOk={() => setGroupLogs({ visible: false, inlongGroupId: '', inlongStreamId: '' })}
+        onCancel={() => setGroupLogs({ visible: false, inlongGroupId: '', inlongStreamId: '' })}
       />
     </>
   );

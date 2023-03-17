@@ -1,23 +1,23 @@
 /*
- *  Licensed to the Apache Software Foundation (ASF) under one
- *  or more contributor license agreements.  See the NOTICE file
- *  distributed with this work for additional information
- *  regarding copyright ownership.  The ASF licenses this file
- *  to you under the Apache License, Version 2.0 (the
- *  "License"); you may not use this file except in compliance
- *  with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.inlong.sort.tests.utils;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.common.time.Deadline;
 import org.apache.flink.client.deployment.StandaloneClusterId;
@@ -42,7 +42,6 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.lifecycle.Startables;
-import sun.misc.IOUtils;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -71,6 +70,7 @@ import static org.apache.flink.util.Preconditions.checkState;
  * Every link : MySQL -> Xxx (Test connector) -> MySQL
  */
 public abstract class FlinkContainerTestEnv extends TestLogger {
+
     private static final Logger JM_LOG = LoggerFactory.getLogger(JobMaster.class);
     private static final Logger TM_LOG = LoggerFactory.getLogger(TaskExecutor.class);
     private static final Logger MYSQL_LOG = LoggerFactory.getLogger(MySqlContainer.class);
@@ -106,7 +106,6 @@ public abstract class FlinkContainerTestEnv extends TestLogger {
 
     private static GenericContainer<?> jobManager;
     private static GenericContainer<?> taskManager;
-
 
     // ----------------------------------------------------------------------------------------
     // MYSQL Variables
@@ -278,12 +277,11 @@ public abstract class FlinkContainerTestEnv extends TestLogger {
         File newJar = temporaryFolder.newFile("sort-dist.jar");
         try (
                 JarFile jarFile = new JarFile(SORT_DIST_JAR.toFile());
-                JarOutputStream jos = new JarOutputStream(new FileOutputStream(newJar))
-            ) {
+                JarOutputStream jos = new JarOutputStream(new FileOutputStream(newJar))) {
             jarFile.stream().forEach(entry -> {
                 try (InputStream is = jarFile.getInputStream(entry)) {
                     jos.putNextEntry(entry);
-                    jos.write(IOUtils.readNBytes(is, is.available()));
+                    jos.write(IOUtils.toByteArray(is));
                     jos.closeEntry();
                 } catch (IOException e) {
                     throw new RuntimeException(e);
@@ -293,8 +291,10 @@ public abstract class FlinkContainerTestEnv extends TestLogger {
             for (Path jar : jars) {
                 try (InputStream is = new FileInputStream(jar.toFile())) {
                     jos.putNextEntry(new JarEntry("lib/" + jar.getFileName().toString()));
-                    jos.write(IOUtils.readNBytes(is, is.available()));
+                    jos.write(IOUtils.toByteArray(is));
                     jos.closeEntry();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
                 }
             }
 
@@ -306,7 +306,7 @@ public abstract class FlinkContainerTestEnv extends TestLogger {
     private String copyToContainerTmpPath(GenericContainer<?> container, String filePath) throws IOException {
         Path path = Paths.get(filePath);
         byte[] fileData = Files.readAllBytes(path);
-            String containerPath = "/tmp/" + path.getFileName();
+        String containerPath = "/tmp/" + path.getFileName();
         container.copyFileToContainer(Transferable.of(fileData), containerPath);
         return containerPath;
     }

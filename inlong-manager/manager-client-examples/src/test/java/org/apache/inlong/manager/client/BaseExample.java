@@ -17,13 +17,11 @@
 
 package org.apache.inlong.manager.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import org.apache.inlong.manager.common.auth.DefaultAuthentication;
-import org.apache.inlong.manager.common.enums.DataSeparator;
+import org.apache.inlong.manager.common.consts.InlongConstants;
 import org.apache.inlong.manager.common.enums.FieldType;
 import org.apache.inlong.manager.common.enums.FileFormat;
-import org.apache.inlong.manager.common.consts.InlongConstants;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.group.pulsar.InlongPulsarInfo;
 import org.apache.inlong.manager.pojo.sink.SinkField;
@@ -43,9 +41,7 @@ import java.util.Map;
 @Data
 public class BaseExample {
 
-    protected static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    // Manager web url
+    // Service url of the inlong manager
     private String serviceUrl = "127.0.0.1:8083";
     // Inlong user && passwd
     private DefaultAuthentication inlongAuth = new DefaultAuthentication("admin", "inlong");
@@ -75,8 +71,6 @@ public class BaseExample {
         pulsarInfo.setInCharges("admin");
 
         // pulsar conf
-        pulsarInfo.setServiceUrl(pulsarServiceUrl);
-        pulsarInfo.setAdminUrl(pulsarAdminUrl);
         pulsarInfo.setTenant(tenant);
         pulsarInfo.setMqResource(namespace);
 
@@ -109,7 +103,7 @@ public class BaseExample {
         streamInfo.setName(this.getStreamId());
         streamInfo.setInlongStreamId(this.getStreamId());
         streamInfo.setDataEncoding(StandardCharsets.UTF_8.toString());
-        streamInfo.setDataSeparator(DataSeparator.VERTICAL_BAR.getSeparator());
+        streamInfo.setDataSeparator("|");
         // if you need strictly order for data, set to 1
         streamInfo.setSyncSend(InlongConstants.SYNC_SEND);
         streamInfo.setMqResource(this.getTopic());
@@ -126,7 +120,7 @@ public class BaseExample {
         hiveSink.setAuthentication(new DefaultAuthentication("hive", "hive"));
         hiveSink.setDataEncoding(StandardCharsets.UTF_8.toString());
         hiveSink.setFileFormat(FileFormat.TextFile.name());
-        hiveSink.setDataSeparator(DataSeparator.VERTICAL_BAR.getSeparator());
+        hiveSink.setDataSeparator("|");
         hiveSink.setDataPath("hdfs://{ip:port}/usr/hive/warehouse/{db.name}");
         hiveSink.setHiveConfDir("{hive.conf.dir}");
 

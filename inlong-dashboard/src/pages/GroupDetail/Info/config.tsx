@@ -17,15 +17,23 @@
  * under the License.
  */
 
-// import React from 'react';
-import { groupForm } from '@/metas/group';
+import React, { useCallback, useMemo } from 'react';
+import { Divider } from 'antd';
+import i18n from '@/i18n';
+import { useLoadMeta, GroupMetaType } from '@/metas';
 import { excludeObjectArray } from '@/utils';
 
-export const getFormContent = ({ editing, isCreate, isUpdate }) => {
-  const excludeKeys = ['ensemble'].concat(isCreate ? 'mqResource' : '');
-  const fields = excludeObjectArray(excludeKeys, groupForm);
+export const useFormContent = ({ mqType, editing, isCreate, isUpdate }) => {
+  const { Entity } = useLoadMeta<GroupMetaType>('group', mqType);
 
-  return isCreate
+  const entityFields = useMemo(() => {
+    return Entity ? new Entity().renderRow() : [];
+  }, [Entity]);
+
+  const excludeKeys = ['ensemble'].concat(isCreate ? 'mqResource' : '');
+  const fields = excludeObjectArray(excludeKeys, entityFields || []);
+
+  const formContent = isCreate
     ? fields.map(item => {
         if (item.name === 'inlongGroupId' && isUpdate) {
           return {
@@ -38,18 +46,48 @@ export const getFormContent = ({ editing, isCreate, isUpdate }) => {
         }
         return item;
       })
-    : fields.map(item => ({
-        ...item,
-        type: transType(editing, item),
-        suffix:
-          typeof item.suffix === 'object' && !editing
-            ? {
-                ...item.suffix,
-                type: 'text',
-              }
-            : item.suffix,
-        extra: null,
-      }));
+    : fields.map(item => {
+        const t = transType(editing, item);
+        return {
+          ...item,
+          type: t,
+          suffix:
+            typeof item.suffix === 'object' && !editing
+              ? {
+                  ...item.suffix,
+                  type: 'text',
+                }
+              : item.suffix,
+          extra: null,
+          rules: t === 'text' ? undefined : item.rules,
+        };
+      });
+
+  const { Entity: DefaultEntity } = useLoadMeta<GroupMetaType>('group', '');
+
+  const isMqKey = useCallback(
+    formName => {
+      const defaultGroupKeysI18nMap = DefaultEntity?.I18nMap || {};
+      return !defaultGroupKeysI18nMap[formName] || ['mqType', 'mqResource'].includes(formName);
+    },
+    [DefaultEntity?.I18nMap],
+  );
+
+  const basicFormContent = formContent.filter(item => !isMqKey(item.name));
+  const mqFormContent = formContent.filter(item => isMqKey(item.name));
+
+  return [
+    {
+      type: <Divider orientation="left">{i18n.t('pages.GroupDetail.Info.Basic')}</Divider>,
+      col: 24,
+    },
+    ...basicFormContent,
+    {
+      type: <Divider orientation="left">{i18n.t('pages.GroupDetail.Info.Mq')}</Divider>,
+      col: 24,
+    },
+    ...mqFormContent,
+  ];
 };
 
 function transType(editing: boolean, conf) {
@@ -59,6 +97,7 @@ function transType(editing: boolean, conf) {
         'name',
         'description',
         'inCharges',
+        'dataReportType',
         'ensemble',
         'writeQuorum',
         'ackQuorum',

@@ -17,16 +17,18 @@
 
 package org.apache.inlong.manager.client.api.inner.client;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.service.InlongStreamApi;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.util.Preconditions;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.common.Response;
 import org.apache.inlong.manager.pojo.stream.InlongStreamBriefInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamPageRequest;
+import org.apache.inlong.manager.pojo.stream.StreamField;
 
 import java.util.List;
 
@@ -59,8 +61,8 @@ public class InlongStreamClient {
     public Boolean isStreamExists(InlongStreamInfo streamInfo) {
         final String groupId = streamInfo.getInlongGroupId();
         final String streamId = streamInfo.getInlongStreamId();
-        Preconditions.checkNotEmpty(groupId, "InlongGroupId should not be empty");
-        Preconditions.checkNotEmpty(streamId, "InlongStreamId should not be empty");
+        Preconditions.expectNotBlank(groupId, ErrorCodeEnum.GROUP_ID_IS_EMPTY);
+        Preconditions.expectNotBlank(streamId, ErrorCodeEnum.STREAM_ID_IS_EMPTY);
 
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongStreamApi.isStreamExists(groupId, streamId));
         ClientUtils.assertRespSuccess(response);
@@ -118,8 +120,8 @@ public class InlongStreamClient {
      * @param request query request
      * @return inlong stream brief list
      */
-    public PageInfo<InlongStreamBriefInfo> listByCondition(InlongStreamPageRequest request) {
-        Response<PageInfo<InlongStreamBriefInfo>> response = ClientUtils.executeHttpCall(
+    public PageResult<InlongStreamBriefInfo> listByCondition(InlongStreamPageRequest request) {
+        Response<PageResult<InlongStreamBriefInfo>> response = ClientUtils.executeHttpCall(
                 inlongStreamApi.listByCondition(request));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -132,7 +134,7 @@ public class InlongStreamClient {
         InlongStreamPageRequest pageRequest = new InlongStreamPageRequest();
         pageRequest.setInlongGroupId(inlongGroupId);
 
-        Response<PageInfo<InlongStreamInfo>> response = ClientUtils.executeHttpCall(
+        Response<PageResult<InlongStreamInfo>> response = ClientUtils.executeHttpCall(
                 inlongStreamApi.listStream(pageRequest));
         ClientUtils.assertRespSuccess(response);
         return response.getData().getList();
@@ -146,8 +148,8 @@ public class InlongStreamClient {
      * @return whether succeed
      */
     public boolean startProcess(String groupId, String streamId) {
-        Preconditions.checkNotEmpty(groupId, "InlongGroupId should not be empty");
-        Preconditions.checkNotEmpty(streamId, "InlongStreamId should not be empty");
+        Preconditions.expectNotBlank(groupId, ErrorCodeEnum.GROUP_ID_IS_EMPTY);
+        Preconditions.expectNotBlank(streamId, ErrorCodeEnum.STREAM_ID_IS_EMPTY);
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongStreamApi.startProcess(groupId, streamId));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -161,8 +163,8 @@ public class InlongStreamClient {
      * @return whether succeed
      */
     public boolean suspendProcess(String groupId, String streamId) {
-        Preconditions.checkNotEmpty(groupId, "InlongGroupId should not be empty");
-        Preconditions.checkNotEmpty(streamId, "InlongStreamId should not be empty");
+        Preconditions.expectNotBlank(groupId, ErrorCodeEnum.GROUP_ID_IS_EMPTY);
+        Preconditions.expectNotBlank(streamId, ErrorCodeEnum.STREAM_ID_IS_EMPTY);
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongStreamApi.suspendProcess(groupId, streamId));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -176,8 +178,8 @@ public class InlongStreamClient {
      * @return whether succeed
      */
     public boolean restartProcess(String groupId, String streamId) {
-        Preconditions.checkNotEmpty(groupId, "InlongGroupId should not be empty");
-        Preconditions.checkNotEmpty(streamId, "InlongStreamId should not be empty");
+        Preconditions.expectNotBlank(groupId, ErrorCodeEnum.GROUP_ID_IS_EMPTY);
+        Preconditions.expectNotBlank(streamId, ErrorCodeEnum.STREAM_ID_IS_EMPTY);
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongStreamApi.restartProcess(groupId, streamId));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -191,8 +193,8 @@ public class InlongStreamClient {
      * @return whether succeed
      */
     public boolean deleteProcess(String groupId, String streamId) {
-        Preconditions.checkNotEmpty(groupId, "InlongGroupId should not be empty");
-        Preconditions.checkNotEmpty(streamId, "InlongStreamId should not be empty");
+        Preconditions.expectNotBlank(groupId, ErrorCodeEnum.GROUP_ID_IS_EMPTY);
+        Preconditions.expectNotBlank(streamId, ErrorCodeEnum.STREAM_ID_IS_EMPTY);
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongStreamApi.deleteProcess(groupId, streamId));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
@@ -206,9 +208,21 @@ public class InlongStreamClient {
      * @return whether succeed
      */
     public boolean delete(String groupId, String streamId) {
-        Preconditions.checkNotEmpty(groupId, "InlongGroupId should not be empty");
-        Preconditions.checkNotEmpty(streamId, "InlongStreamId should not be empty");
+        Preconditions.expectNotBlank(groupId, ErrorCodeEnum.GROUP_ID_IS_EMPTY);
+        Preconditions.expectNotBlank(streamId, ErrorCodeEnum.STREAM_ID_IS_EMPTY);
         Response<Boolean> response = ClientUtils.executeHttpCall(inlongStreamApi.delete(groupId, streamId));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData();
+    }
+
+    /**
+     * Converts a json string to a streamFields
+     *
+     * @param fieldsJson JSON string for the field information
+     * @return list of stream field
+     */
+    public List<StreamField> parseFields(String fieldsJson) {
+        Response<List<StreamField>> response = ClientUtils.executeHttpCall(inlongStreamApi.parseFields(fieldsJson));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }

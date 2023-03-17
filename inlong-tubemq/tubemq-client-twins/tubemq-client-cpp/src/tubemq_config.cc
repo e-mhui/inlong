@@ -53,9 +53,12 @@ void TubeMQServiceConfig::SetLogCofigInfo(int32_t log_max_num,
                             int32_t log_max_size, int32_t log_level, const string& log_path) {
   log_num_   = log_max_num;
   log_size_  = log_max_size;
-  log_level_ = log_level;
   log_path_  = log_path;
   log_level_ = TUBEMQ_MID(log_level, 4, 0);
+}
+
+void TubeMQServiceConfig::SetLogPrintLevel(int32_t log_level) {
+    log_level_ = TUBEMQ_MID(log_level, 4, 0);
 }
 
 void TubeMQServiceConfig::SetDnsXfsPeriodInMs(int32_t dns_xfs_period_ms) {
@@ -103,25 +106,25 @@ const int32_t TubeMQServiceConfig::GetSignalThreads() const {
 }
 
 const string TubeMQServiceConfig::ToString() const {
-    stringstream ss;
-    ss << "TubeMQServiceConfig={log_num_=";
-    ss << log_num_;
-    ss << ", log_size_=";
-    ss << log_size_;
-    ss << ", log_level_=";
-    ss << log_level_;
-    ss << ", log_path_='";
-    ss << log_path_;
-    ss << "', dns_xfs_period_ms_=";
-    ss << dns_xfs_period_ms_;
-    ss << ", timer_threads_=";
-    ss << timer_threads_;
-    ss << ", network_threads_=";
-    ss << network_threads_;
-    ss << ", signal_threads_=";
-    ss << signal_threads_;
-    ss << "}";
-    return ss.str();
+  stringstream ss;
+  ss << "TubeMQServiceConfig={log_num_=";
+  ss << log_num_;
+  ss << ", log_size_=";
+  ss << log_size_;
+  ss << ", log_level_=";
+  ss << log_level_;
+  ss << ", log_path_='";
+  ss << log_path_;
+  ss << "', dns_xfs_period_ms_=";
+  ss << dns_xfs_period_ms_;
+  ss << ", timer_threads_=";
+  ss << timer_threads_;
+  ss << ", network_threads_=";
+  ss << network_threads_;
+  ss << ", signal_threads_=";
+  ss << signal_threads_;
+  ss << "}";
+  return ss.str();
 }
 
 BaseConfig::BaseConfig() {
@@ -702,5 +705,9 @@ const string ConsumerConfig::ToString() const {
   ss << "}";
   return ss.str();
 }
+
+ProducerConfig::ProducerConfig() {}
+
+ProducerConfig::~ProducerConfig() {}
 
 }  // namespace tubemq

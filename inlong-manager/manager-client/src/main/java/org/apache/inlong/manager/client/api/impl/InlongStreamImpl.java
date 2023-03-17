@@ -34,6 +34,7 @@ import org.apache.inlong.manager.client.api.inner.client.StreamSourceClient;
 import org.apache.inlong.manager.client.api.inner.client.StreamTransformClient;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
 import org.apache.inlong.manager.client.api.util.StreamTransformTransfer;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.util.JsonUtils;
 import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.pojo.sink.StreamSink;
@@ -77,6 +78,12 @@ public class InlongStreamImpl implements InlongStream {
 
     private Map<String, StreamTransform> streamTransforms = Maps.newHashMap();
 
+    private Set<String> sourcesToDelete = Sets.newHashSet();
+
+    private Set<String> sinksToDelete = Sets.newHashSet();
+
+    private Set<String> transformsToDelete = Sets.newHashSet();
+
     private List<StreamField> streamFields = Lists.newArrayList();
 
     /**
@@ -96,16 +103,15 @@ public class InlongStreamImpl implements InlongStream {
         if (CollectionUtils.isNotEmpty(streamFields)) {
             this.streamFields = streamFields.stream()
                     .map(fieldInfo -> new StreamField(
-                                    fieldInfo.getId(),
-                                    fieldInfo.getFieldType(),
-                                    fieldInfo.getFieldName(),
-                                    fieldInfo.getFieldComment(),
-                                    fieldInfo.getFieldValue(),
-                                    fieldInfo.getIsMetaField(),
-                                    fieldInfo.getMetaFieldName(),
-                                    fieldInfo.getOriginNodeName()
-                            )
-                    ).collect(Collectors.toList());
+                            fieldInfo.getId(),
+                            fieldInfo.getFieldType(),
+                            fieldInfo.getFieldName(),
+                            fieldInfo.getFieldComment(),
+                            fieldInfo.getFieldValue(),
+                            fieldInfo.getIsMetaField(),
+                            fieldInfo.getMetaFieldName(),
+                            fieldInfo.getOriginNodeName()))
+                    .collect(Collectors.toList());
         }
 
         List<? extends StreamSink> sinkInfos = streamInfo.getSinkList();
@@ -124,8 +130,7 @@ public class InlongStreamImpl implements InlongStream {
                             (source1, source2) -> {
                                 throw new RuntimeException(String.format("duplicate sourceName: %s in streamId: %s",
                                         source1.getSourceName(), this.inlongStreamId));
-                            }
-                    ));
+                            }));
         }
     }
 
@@ -163,7 +168,8 @@ public class InlongStreamImpl implements InlongStream {
 
     @Override
     public InlongStream addSource(StreamSource source) {
-        Preconditions.checkNotNull(source.getSourceName(), "source name cannot be null");
+        Preconditions.expectNotBlank(source.getSourceName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "source name cannot be null");
         String sourceName = source.getSourceName();
         if (streamSources.get(sourceName) != null) {
             throw new IllegalArgumentException(String.format("source name=%s has already be set", source));
@@ -174,7 +180,8 @@ public class InlongStreamImpl implements InlongStream {
 
     @Override
     public InlongStream addSink(StreamSink streamSink) {
-        Preconditions.checkNotNull(streamSink.getSinkName(), "sink name cannot be null");
+        Preconditions.expectNotBlank(streamSink.getSinkName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "sink name cannot be null");
         String sinkName = streamSink.getSinkName();
         if (streamSinks.get(sinkName) != null) {
             throw new IllegalArgumentException(String.format("sink name=%s has already be set", streamSink));
@@ -185,7 +192,8 @@ public class InlongStreamImpl implements InlongStream {
 
     @Override
     public InlongStream addTransform(StreamTransform transform) {
-        Preconditions.checkNotNull(transform.getTransformName(), "transform name should not be empty");
+        Preconditions.expectNotBlank(transform.getTransformName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "transform name should not be empty");
         String transformName = transform.getTransformName();
         if (streamTransforms.get(transformName) != null) {
             throw new IllegalArgumentException(String.format("transform name=%s has already be set", transform));
@@ -196,39 +204,42 @@ public class InlongStreamImpl implements InlongStream {
 
     @Override
     public InlongStream deleteSource(String sourceName) {
-        streamSources.remove(sourceName);
+        sourcesToDelete.add(sourceName);
         return this;
     }
 
     @Override
     public InlongStream deleteSink(String sinkName) {
-        streamSinks.remove(sinkName);
+        sinksToDelete.add(sinkName);
         return this;
     }
 
     @Override
     public InlongStream deleteTransform(String transformName) {
-        streamTransforms.remove(transformName);
+        transformsToDelete.add(transformName);
         return this;
     }
 
     @Override
     public InlongStream updateSource(StreamSource source) {
-        Preconditions.checkNotNull(source.getSourceName(), "source name cannot be null");
+        Preconditions.expectNotBlank(source.getSourceName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "source name cannot be null");
         streamSources.put(source.getSourceName(), source);
         return this;
     }
 
     @Override
     public InlongStream updateSink(StreamSink streamSink) {
-        Preconditions.checkNotNull(streamSink.getSinkName(), "sink name cannot be null");
+        Preconditions.expectNotBlank(streamSink.getSinkName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "sink name cannot be null");
         streamSinks.put(streamSink.getSinkName(), streamSink);
         return this;
     }
 
     @Override
     public InlongStream updateTransform(StreamTransform transform) {
-        Preconditions.checkNotNull(transform.getTransformName(), "transform name cannot be null");
+        Preconditions.expectNotBlank(transform.getTransformName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "transform name cannot be null");
         streamTransforms.put(transform.getTransformName(), transform);
         return this;
     }
@@ -345,8 +356,12 @@ public class InlongStreamImpl implements InlongStream {
                             updateState.getValue()));
                 }
                 updateTransformNames.add(transformName);
-            } else {
-                log.warn("Unknown transform {} from server", transformName);
+            } else if (transformsToDelete.contains(transformName)) {
+                TransformRequest transformRequest = StreamTransformTransfer.createTransformRequest(transform,
+                        streamInfo);
+                if (!transformClient.deleteTransform(transformRequest)) {
+                    throw new RuntimeException(String.format("Delete transform=%s failed", transformRequest));
+                }
             }
         }
         for (Map.Entry<String, StreamTransform> transformEntry : this.streamTransforms.entrySet()) {
@@ -379,8 +394,10 @@ public class InlongStreamImpl implements InlongStream {
                             updateState.getValue()));
                 }
                 updateSourceNames.add(sourceName);
-            } else {
-                log.warn("Unknown source {} from server", sourceName);
+            } else if (sourcesToDelete.contains(sourceName)) {
+                if (!sourceClient.deleteSource(id)) {
+                    throw new RuntimeException(String.format("Delete source=%s failed", source));
+                }
             }
         }
         for (Map.Entry<String, StreamSource> sourceEntry : this.streamSources.entrySet()) {
@@ -414,8 +431,10 @@ public class InlongStreamImpl implements InlongStream {
                             updateState.getValue()));
                 }
                 updateSinkNames.add(sinkName);
-            } else {
-                log.error("Unknown sink {} from server", sinkName);
+            } else if (sinksToDelete.contains(sinkName)) {
+                if (!sinkClient.deleteSink(id)) {
+                    throw new RuntimeException(String.format("Delete sink=%s failed", sink));
+                }
             }
         }
 
@@ -434,7 +453,7 @@ public class InlongStreamImpl implements InlongStream {
 
     @Override
     public StreamSink getSinkInfoById(Integer sinkId) {
-        Preconditions.checkNotNull(sinkId, "sinkId cannot be null");
+        Preconditions.expectNotNull(sinkId, "sinkId cannot be null");
         // Get from cache firstly
         return this.streamSinks.values()
                 .stream()
@@ -446,13 +465,13 @@ public class InlongStreamImpl implements InlongStream {
 
     @Override
     public StreamSink getSinkInfoByName(String sinkName) {
-        Preconditions.checkNotEmpty(sinkName, "sinkName cannot be empty");
+        Preconditions.expectNotBlank(sinkName, ErrorCodeEnum.INVALID_PARAMETER, "sinkName cannot be empty");
         return this.streamSinks.get(sinkName);
     }
 
     @Override
     public StreamSource getSourceById(int sourceId) {
-        Preconditions.checkNotNull(sourceId, "sinkId cannot be null");
+        Preconditions.expectNotNull(sourceId, "sinkId cannot be null");
         return this.streamSources.values()
                 .stream()
                 .filter(streamSource -> streamSource.getId().equals(sourceId))

@@ -1,20 +1,18 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.inlong.sort.iceberg.sink;
@@ -38,14 +36,18 @@ import java.io.IOException;
 import java.util.List;
 import java.util.function.Supplier;
 
-class FlinkManifestUtil {
+/**
+ * Copy from iceberg-flink:iceberg-flink-1.13:0.13.2
+ */
+public class FlinkManifestUtil {
+
     private static final int FORMAT_V2 = 2;
     private static final Long DUMMY_SNAPSHOT_ID = 0L;
 
     private FlinkManifestUtil() {
     }
 
-    static ManifestFile writeDataFiles(OutputFile outputFile, PartitionSpec spec, List<DataFile> dataFiles)
+    public static ManifestFile writeDataFiles(OutputFile outputFile, PartitionSpec spec, List<DataFile> dataFiles)
             throws IOException {
         ManifestWriter<DataFile> writer = ManifestFiles.write(FORMAT_V2, spec, outputFile, DUMMY_SNAPSHOT_ID);
 
@@ -56,19 +58,19 @@ class FlinkManifestUtil {
         return writer.toManifestFile();
     }
 
-    static List<DataFile> readDataFiles(ManifestFile manifestFile, FileIO io) throws IOException {
+    public static List<DataFile> readDataFiles(ManifestFile manifestFile, FileIO io) throws IOException {
         try (CloseableIterable<DataFile> dataFiles = ManifestFiles.read(manifestFile, io)) {
             return Lists.newArrayList(dataFiles);
         }
     }
 
-    static ManifestOutputFileFactory createOutputFileFactory(Table table, String flinkJobId, int subTaskId,
+    public static ManifestOutputFileFactory createOutputFileFactory(Table table, String flinkJobId, int subTaskId,
             long attemptNumber) {
         TableOperations ops = ((HasTableOperations) table).operations();
         return new ManifestOutputFileFactory(ops, table.io(), table.properties(), flinkJobId, subTaskId, attemptNumber);
     }
 
-    static DeltaManifests writeCompletedFiles(WriteResult result,
+    public static DeltaManifests writeCompletedFiles(WriteResult result,
             Supplier<OutputFile> outputFileSupplier,
             PartitionSpec spec) throws IOException {
 
@@ -98,7 +100,7 @@ class FlinkManifestUtil {
         return new DeltaManifests(dataManifest, deleteManifest, result.referencedDataFiles());
     }
 
-    static WriteResult readCompletedFiles(DeltaManifests deltaManifests, FileIO io) throws IOException {
+    public static WriteResult readCompletedFiles(DeltaManifests deltaManifests, FileIO io) throws IOException {
         WriteResult.Builder builder = WriteResult.builder();
 
         // Read the completed data files from persisted data manifest file.

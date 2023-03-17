@@ -17,22 +17,27 @@
 
 package org.apache.inlong.manager.pojo.sink.mysql;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.inlong.manager.common.consts.InlongConstants;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
+import org.apache.inlong.manager.common.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.validation.constraints.NotNull;
+import java.net.URLDecoder;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * MySQL sink info
@@ -43,11 +48,23 @@ import java.util.Map;
 @AllArgsConstructor
 public class MySQLSinkDTO {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    /**
+     * The sensitive param may lead the attack.
+     */
+    private static final Map<String, String> SENSITIVE_PARAM_MAP = new HashMap<String, String>() {
+
+        {
+            put("autoDeserialize=true", "autoDeserialize=false");
+            put("allowLoadLocalInfile=true", "allowLoadLocalInfile=false");
+            put("allowUrlInLocalInfile=true", "allowUrlInLocalInfile=false");
+            put("allowLoadLocalInfileInPath=/", "allowLoadLocalInfileInPath=");
+        }
+    };
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MySQLSinkDTO.class);
+    private static final String MYSQL_JDBC_PREFIX = "jdbc:mysql://";
 
-    @ApiModelProperty("MySQL JDBC URL, such as jdbc:mysql://host:port/database")
+    @ApiModelProperty("MySQL JDBC URL, such as jdbc:mysql://host:port")
     private String jdbcUrl;
 
     @ApiModelProperty("Username for JDBC URL")
@@ -55,6 +72,9 @@ public class MySQLSinkDTO {
 
     @ApiModelProperty("User password")
     private String password;
+
+    @ApiModelProperty("Target database name")
+    private String databaseName;
 
     @ApiModelProperty("Target table name")
     private String tableName;
@@ -70,13 +90,16 @@ public class MySQLSinkDTO {
      *
      * @param request MySQLSinkRequest
      * @return {@link MySQLSinkDTO}
+     * @apiNote The config here will be saved to the database, so filter sensitive params before saving.
      */
     public static MySQLSinkDTO getFromRequest(MySQLSinkRequest request) {
+        String url = filterSensitive(request.getJdbcUrl());
         return MySQLSinkDTO.builder()
-                .jdbcUrl(request.getJdbcUrl())
+                .jdbcUrl(url)
                 .username(request.getUsername())
                 .password(request.getPassword())
                 .primaryKey(request.getPrimaryKey())
+                .databaseName(request.getDatabaseName())
                 .tableName(request.getTableName())
                 .properties(request.getProperties())
                 .build();
@@ -90,11 +113,10 @@ public class MySQLSinkDTO {
      */
     public static MySQLSinkDTO getFromJson(@NotNull String extParams) {
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, MySQLSinkDTO.class);
+            return JsonUtils.parseObject(extParams, MySQLSinkDTO.class);
         } catch (Exception e) {
-            LOGGER.error("fetch mysql sink info failed from json params: " + extParams, e);
-            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT,
+                    String.format("parse extParams of MySQL SinkDTO failure: %s", e.getMessage()));
         }
     }
 
@@ -107,8 +129,7 @@ public class MySQLSinkDTO {
      */
     public static MySQLTableInfo getTableInfo(MySQLSinkDTO mySQLSink, List<MySQLColumnInfo> columnList) {
         MySQLTableInfo tableInfo = new MySQLTableInfo();
-        String dbName = getDbNameFromUrl(mySQLSink.getJdbcUrl());
-        tableInfo.setDbName(dbName);
+        tableInfo.setDbName(mySQLSink.getDatabaseName());
         tableInfo.setTableName(mySQLSink.getTableName());
         tableInfo.setPrimaryKey(mySQLSink.getPrimaryKey());
         tableInfo.setColumns(columnList);
@@ -118,10 +139,10 @@ public class MySQLSinkDTO {
     /**
      * Get DbName from jdbcUrl
      *
-     * @param jdbcUrl  MySQL JDBC url, such as jdbc:mysql://host:port/database
+     * @param jdbcUrl MySQL JDBC url, such as jdbc:mysql://host:port/database
      * @return database name
      */
-    public static String getDbNameFromUrl(String jdbcUrl) {
+    private static String getDbNameFromUrl(String jdbcUrl) {
         String database = null;
 
         if (Strings.isNullOrEmpty(jdbcUrl)) {
@@ -140,26 +161,82 @@ public class MySQLSinkDTO {
         }
 
         String connUri = jdbcUrl.substring(pos1 + 1);
-        int pos;
         if (connUri.startsWith("//")) {
-            if ((pos = connUri.indexOf('/', 2)) != -1) {
+            int pos = connUri.indexOf('/', 2);
+            if (pos != -1) {
                 database = connUri.substring(pos + 1);
             }
         } else {
             database = connUri;
         }
 
-        if (database.contains("?")) {
-            database = database.substring(0, database.indexOf("?"));
-        }
-
-        if (database.contains(";")) {
-            database = database.substring(0, database.indexOf(";"));
-        }
-
         if (Strings.isNullOrEmpty(database)) {
-            throw new IllegalArgumentException("Invalid JDBC url.");
+            throw new IllegalArgumentException("Invalid JDBC URL: " + jdbcUrl);
+        }
+
+        if (database.contains(InlongConstants.QUESTION_MARK)) {
+            database = database.substring(0, database.indexOf(InlongConstants.QUESTION_MARK));
+        }
+        if (database.contains(InlongConstants.SEMICOLON)) {
+            database = database.substring(0, database.indexOf(InlongConstants.SEMICOLON));
         }
         return database;
     }
+
+    public static String setDbNameToUrl(String jdbcUrl, String databaseName) {
+        if (StringUtils.isBlank(jdbcUrl)) {
+            return jdbcUrl;
+        }
+        String pattern = "jdbc:mysql://(?<host>[a-zA-Z0-9-//.]+):(?<port>[0-9]+)?(?<ext>)";
+        Pattern namePattern = Pattern.compile(pattern);
+        Matcher dataMatcher = namePattern.matcher(jdbcUrl);
+        StringBuilder resultUrl;
+        if (dataMatcher.find()) {
+            String host = dataMatcher.group("host");
+            String port = dataMatcher.group("port");
+            resultUrl = new StringBuilder().append(MYSQL_JDBC_PREFIX)
+                    .append(host)
+                    .append(InlongConstants.COLON)
+                    .append(port)
+                    .append(InlongConstants.SLASH)
+                    .append(databaseName);
+        } else {
+            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT,
+                    "MySQL JDBC URL was invalid, it should like jdbc:mysql://host:port");
+        }
+        if (jdbcUrl.contains(InlongConstants.QUESTION_MARK)) {
+            resultUrl.append(jdbcUrl.substring(jdbcUrl.indexOf(InlongConstants.QUESTION_MARK)));
+        }
+        return resultUrl.toString();
+    }
+
+    /**
+     * Filter the sensitive params for the given URL.
+     *
+     * @param url str may have some sensitive params
+     * @return str without sensitive param
+     */
+    public static String filterSensitive(String url) {
+        if (StringUtils.isBlank(url)) {
+            return url;
+        }
+        try {
+            String resultUrl = url;
+            while (resultUrl.contains(InlongConstants.PERCENT)) {
+                resultUrl = URLDecoder.decode(resultUrl, "UTF-8");
+            }
+            for (String sensitiveParam : SENSITIVE_PARAM_MAP.keySet()) {
+                if (StringUtils.containsIgnoreCase(resultUrl, sensitiveParam)) {
+                    resultUrl = StringUtils.replaceIgnoreCase(resultUrl, sensitiveParam,
+                            SENSITIVE_PARAM_MAP.get(sensitiveParam));
+                }
+            }
+            LOGGER.info("the origin url [{}] was replaced to: [{}]", url, resultUrl);
+            return resultUrl;
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT,
+                    ErrorCodeEnum.SINK_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+        }
+    }
+
 }

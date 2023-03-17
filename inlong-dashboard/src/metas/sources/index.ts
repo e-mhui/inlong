@@ -17,39 +17,16 @@
  * under the License.
  */
 
-import type { GetStorageFormFieldsType } from '@/utils/metaData';
-import type { ColumnsType } from 'antd/es/table';
-import { autoPush } from './autoPush';
-import { binLog } from './binLog';
-import { file } from './file';
+import { sourceLoader } from '@/loaders';
+import { allDefaultSources } from './defaults';
+import { allExtendsSources } from './extends';
+import type { SourceMetaType } from './types';
 
-export interface SourceType {
-  label: string;
-  value: string;
-  // Generate form configuration for single data
-  getForm: GetStorageFormFieldsType;
-  // Generate table display configuration
-  tableColumns: ColumnsType;
-  // Custom convert interface data to front-end data format
-  toFormValues?: (values: unknown) => unknown;
-  // Custom convert front-end data to interface data format
-  toSubmitValues?: (values: unknown) => unknown;
-}
+export type { SourceMetaType };
 
-export const sources: SourceType[] = [
-  {
-    label: 'MySQL BinLog',
-    value: 'MYSQL_BINLOG',
-    ...binLog,
-  },
-  {
-    label: 'File',
-    value: 'FILE',
-    ...file,
-  },
-  {
-    label: 'Auto Push',
-    value: 'AUTO_PUSH',
-    ...autoPush,
-  },
-];
+export const sources = sourceLoader.loadPluginList<SourceMetaType>(
+  allDefaultSources,
+  allExtendsSources,
+);
+
+export const defaultValue = sourceLoader.loadDefaultPlugin<SourceMetaType>(sources);

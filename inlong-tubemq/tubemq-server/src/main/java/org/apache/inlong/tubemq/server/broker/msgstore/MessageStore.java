@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -59,6 +59,7 @@ import org.slf4j.LoggerFactory;
  * data in disk, and statistics of produce and consume.
  */
 public class MessageStore implements Closeable {
+
     private static final Logger logger = LoggerFactory.getLogger(MessageStore.class);
     private static final long FLUSH_CONDITION_WAIT_DLT_NS =
             TimeUnit.MILLISECONDS.toNanos(100);
@@ -91,18 +92,15 @@ public class MessageStore implements Closeable {
     private int maxAllowRdSize = 262144;
     private final AtomicInteger memMaxIndexReadCnt = new AtomicInteger(6000);
     private final AtomicInteger fileMaxIndexReadCnt = new AtomicInteger(8000);
-    private final AtomicInteger memMaxFilterIndexReadCnt
-            = new AtomicInteger(memMaxIndexReadCnt.get() * 2);
-    private final AtomicInteger fileMaxFilterIndexReadCnt
-            = new AtomicInteger(fileMaxIndexReadCnt.get() * 3);
-    private final AtomicInteger fileLowReqMaxFilterIndexReadCnt
-            = new AtomicInteger(fileMaxIndexReadCnt.get() * 10);
-    private final AtomicInteger fileMaxIndexReadSize
-            = new AtomicInteger(this.fileMaxIndexReadCnt.get() * DataStoreUtils.STORE_INDEX_HEAD_LEN);
-    private final AtomicInteger fileMaxFilterIndexReadSize
-            = new AtomicInteger(this.fileMaxFilterIndexReadCnt.get() * DataStoreUtils.STORE_INDEX_HEAD_LEN);
-    private final AtomicInteger fileLowReqMaxFilterIndexReadSize
-            = new AtomicInteger(this.fileLowReqMaxFilterIndexReadCnt.get() * DataStoreUtils.STORE_INDEX_HEAD_LEN);
+    private final AtomicInteger memMaxFilterIndexReadCnt = new AtomicInteger(memMaxIndexReadCnt.get() * 2);
+    private final AtomicInteger fileMaxFilterIndexReadCnt = new AtomicInteger(fileMaxIndexReadCnt.get() * 3);
+    private final AtomicInteger fileLowReqMaxFilterIndexReadCnt = new AtomicInteger(fileMaxIndexReadCnt.get() * 10);
+    private final AtomicInteger fileMaxIndexReadSize =
+            new AtomicInteger(this.fileMaxIndexReadCnt.get() * DataStoreUtils.STORE_INDEX_HEAD_LEN);
+    private final AtomicInteger fileMaxFilterIndexReadSize =
+            new AtomicInteger(this.fileMaxFilterIndexReadCnt.get() * DataStoreUtils.STORE_INDEX_HEAD_LEN);
+    private final AtomicInteger fileLowReqMaxFilterIndexReadSize =
+            new AtomicInteger(this.fileLowReqMaxFilterIndexReadCnt.get() * DataStoreUtils.STORE_INDEX_HEAD_LEN);
     private MsgMemStore msgMemStore;
     private MsgMemStore msgMemStoreBeingFlush;
 
@@ -116,9 +114,9 @@ public class MessageStore implements Closeable {
      * @param maxMsgRDSize            allowed maximum read message bytes
      */
     public MessageStore(MessageStoreManager messageStoreManager,
-                        TopicMetadata topicMetadata, int storeId,
-                        BrokerConfig tubeConfig,
-                        int maxMsgRDSize) throws IOException {
+            TopicMetadata topicMetadata, int storeId,
+            BrokerConfig tubeConfig,
+            int maxMsgRDSize) throws IOException {
         this(messageStoreManager, topicMetadata, storeId, tubeConfig, 0, maxMsgRDSize);
     }
 
@@ -133,9 +131,9 @@ public class MessageStore implements Closeable {
      * @param maxMsgRDSize            allowed maximum read message bytes
      */
     public MessageStore(MessageStoreManager messageStoreManager,
-                        TopicMetadata topicMetadata, int storeId,
-                        BrokerConfig tubeConfig, long offsetIfCreate,
-                        int maxMsgRDSize) throws IOException {
+            TopicMetadata topicMetadata, int storeId,
+            BrokerConfig tubeConfig, long offsetIfCreate,
+            int maxMsgRDSize) throws IOException {
         this.topicMetadata = topicMetadata;
         this.storeId = storeId;
         this.tubeConfig = tubeConfig;
@@ -186,9 +184,9 @@ public class MessageStore implements Closeable {
      * @throws IOException         the exception during processing
      */
     public GetMessageResult getMessages(int reqSwitch, long requestOffset,
-                                        int partitionId, ConsumerNodeInfo consumerNodeInfo,
-                                        String statsKeyBase, int msgSizeLimit,
-                                        long reqRcvTime) throws IOException {
+            int partitionId, ConsumerNodeInfo consumerNodeInfo,
+            String statsKeyBase, int msgSizeLimit,
+            long reqRcvTime) throws IOException {
         // #lizard forgives
         if (this.closed.get()) {
             throw new IllegalStateException(new StringBuilder(512)
@@ -202,7 +200,8 @@ public class MessageStore implements Closeable {
                 requestOffset, "Can't found Message by index in cache");
         // determine position to read.
         reqSwitch = (reqSwitch <= 0)
-                ? 0 : (consumerNodeInfo.isFilterConsume() ? (reqSwitch % 100) : (reqSwitch / 100));
+                ? 0
+                : (consumerNodeInfo.isFilterConsume() ? (reqSwitch % 100) : (reqSwitch / 100));
         if (tubeConfig.isEnableMemStore()) {
             if (reqSwitch > 1) {
                 // in read memory situation, read main memory or backup memory by consumer's config.
@@ -277,7 +276,8 @@ public class MessageStore implements Closeable {
                     reqNewOffset, 0, "current offset is exceed max file offset");
         }
         maxIndexReadLength = consumerNodeInfo.isFilterConsume()
-                ? fileMaxFilterIndexReadSize.get() : fileMaxIndexReadSize.get();
+                ? fileMaxFilterIndexReadSize.get()
+                : fileMaxIndexReadSize.get();
         final ByteBuffer indexBuffer = ByteBuffer.allocate(maxIndexReadLength);
         Segment indexRecordView =
                 this.msgFileStore.indexSlice(reqNewOffset, maxIndexReadLength);
@@ -293,28 +293,27 @@ public class MessageStore implements Closeable {
         indexRecordView.read(indexBuffer, reqNewOffset);
         indexBuffer.flip();
         indexRecordView.relViewRef();
-        if ((msgFileStore.getDataHighMaxOffset() - consumerNodeInfo.getLastDataRdOffset()
-            >= this.tubeConfig.getDoubleDefaultDeduceReadSize())
-            && msgSizeLimit > this.maxAllowRdSize) {
+        if ((msgFileStore.getDataHighMaxOffset() - consumerNodeInfo.getLastDataRdOffset() >= this.tubeConfig
+                .getDoubleDefaultDeduceReadSize())
+                && msgSizeLimit > this.maxAllowRdSize) {
             msgSizeLimit = this.maxAllowRdSize;
         }
         GetMessageResult retResult =
-            msgFileStore.getMessages(partitionId,
-                consumerNodeInfo.getLastDataRdOffset(), reqNewOffset,
-                indexBuffer, consumerNodeInfo.isFilterConsume(),
-                consumerNodeInfo.getFilterCondCodeSet(),
-                statsKeyBase, msgSizeLimit, reqRcvTime);
+                msgFileStore.getMessages(partitionId,
+                        consumerNodeInfo.getLastDataRdOffset(), reqNewOffset,
+                        indexBuffer, consumerNodeInfo.isFilterConsume(),
+                        consumerNodeInfo.getFilterCondCodeSet(),
+                        statsKeyBase, msgSizeLimit, reqRcvTime);
         if (reqSwitch <= 1) {
             retResult.setMaxOffset(getFileIndexMaxOffset());
         } else {
             retResult.setMaxOffset(getIndexMaxOffset());
         }
         if (consumerNodeInfo.isFilterConsume()
-            && retResult.isSuccess
-            && retResult.getLastReadOffset() > 0) {
+                && retResult.isSuccess
+                && retResult.getLastReadOffset() > 0) {
             if ((getFileIndexMaxOffset()
-                - reqNewOffset - retResult.getLastReadOffset())
-                < fileLowReqMaxFilterIndexReadSize.get()) {
+                    - reqNewOffset - retResult.getLastReadOffset()) < fileLowReqMaxFilterIndexReadSize.get()) {
                 retResult.setSlowFreq(true);
             }
         }
@@ -333,7 +332,8 @@ public class MessageStore implements Closeable {
                     .append("[Data Store] Closed MessageStore for storeKey ")
                     .append(this.storeKey).toString());
         }
-        if (timestamp <= this.msgFileStore.getIndexMaxAppendTime()) {
+        if (timestamp <= this.msgFileStore.getIndexMaxAppendTime()
+                || !tubeConfig.isEnableMemStore()) {
             return this.msgFileStore.getStartOffsetByTimeStamp(timestamp);
         }
         this.writeCacheMutex.readLock().lock();
@@ -365,9 +365,9 @@ public class MessageStore implements Closeable {
      * @throws IOException    the exception during processing
      */
     public boolean appendMsg(AppendResult appendResult, int dataLength,
-                             int dataCheckSum, byte[] data,
-                             int msgTypeCode, int msgFlag,
-                             int partitionId, int sentAddr) throws IOException {
+            int dataCheckSum, byte[] data,
+            int msgTypeCode, int msgFlag,
+            int partitionId, int sentAddr) throws IOException {
         return appendMsg2(appendResult, dataLength, dataCheckSum, data,
                 msgTypeCode, msgFlag, partitionId, sentAddr,
                 System.currentTimeMillis(), 3, 1);
@@ -392,11 +392,11 @@ public class MessageStore implements Closeable {
      * @throws IOException    the exception during processing
      */
     public boolean appendMsg2(AppendResult appendResult, int dataLength,
-                              int dataCheckSum, byte[] data,
-                              int msgTypeCode, int msgFlag,
-                              int partitionId, int sentAddr,
-                              long receivedTime, int count,
-                              long waitRetryMs) throws IOException {
+            int dataCheckSum, byte[] data,
+            int msgTypeCode, int msgFlag,
+            int partitionId, int sentAddr,
+            long receivedTime, int count,
+            long waitRetryMs) throws IOException {
         if (this.closed.get()) {
             throw new IllegalStateException(new StringBuilder(512)
                     .append("[Data Store] Closed MessageStore for storeKey ")
@@ -428,35 +428,48 @@ public class MessageStore implements Closeable {
         indexBuffer.putLong(receivedTime);
         indexBuffer.flip();
         appendResult.putReceivedInfo(messageId, receivedTime);
+        boolean appendSuss = true;
+        long startTime = System.currentTimeMillis();
         if (this.tubeConfig.isEnableMemStore()) {
             do {
                 this.writeCacheMutex.readLock().lock();
                 try {
-                    if (this.msgMemStore.appendMsg(msgStoreStatsHolder,
+                    appendSuss = this.msgMemStore.appendMsg(msgStoreStatsHolder,
                             partitionId, msgTypeCode, receivedTime, indexBuffer,
-                            msgBufLen, dataBuffer, appendResult)) {
-                        return true;
-                    }
+                            msgBufLen, dataBuffer, appendResult);
                 } finally {
                     this.writeCacheMutex.readLock().unlock();
                 }
+                if (appendSuss) {
+                    msgStoreStatsHolder.addMsgWriteSuccess(msgBufLen,
+                            System.currentTimeMillis() - startTime);
+                    return true;
+                }
                 if (triggerFlushAndAddMsg(true, false, partitionId, msgTypeCode,
                         receivedTime, indexBuffer, msgBufLen, dataBuffer, appendResult)) {
+                    msgStoreStatsHolder.addMsgWriteSuccess(msgBufLen,
+                            System.currentTimeMillis() - startTime);
                     return true;
                 }
                 ThreadUtils.sleep(waitRetryMs);
             } while (count-- >= 0);
-            msgStoreStatsHolder.addMsgWriteCacheFail();
+            msgStoreStatsHolder.addMsgWriteFailure();
             return false;
         } else {
             StringBuilder strBuffer =
                     new StringBuilder(TBaseConstants.BUILDER_DEFAULT_SIZE);
             Tuple3<Boolean, Long, Long> appendRet =
-                    this.msgFileStore.appendMsg(strBuffer, 1,
+                    this.msgFileStore.appendMsg(false, startTime, strBuffer, 1,
                             DataStoreUtils.STORE_INDEX_HEAD_LEN, indexBuffer,
-                            msgBufLen, dataBuffer,receivedTime, receivedTime);
+                            msgBufLen, dataBuffer, receivedTime, receivedTime);
             appendResult.putAppendResult(appendRet.getF1(), appendRet.getF2());
-            return true;
+            if (appendRet.getF0()) {
+                msgStoreStatsHolder.addMsgWriteSuccess(msgBufLen,
+                        System.currentTimeMillis() - startTime);
+            } else {
+                msgStoreStatsHolder.addMsgWriteFailure();
+            }
+            return appendRet.getF0();
         }
     }
 
@@ -562,7 +575,7 @@ public class MessageStore implements Closeable {
             strBuffer.delete(0, strBuffer.length());
             if (tubeConfig.isEnableMemStore()) {
                 ThreadUtils.sleep(100);
-                flush(System.currentTimeMillis(), strBuffer);
+                flush(strBuffer);
                 this.msgMemStore.close();
                 this.msgMemStoreBeingFlush.close();
                 this.executor.shutdown();
@@ -672,7 +685,7 @@ public class MessageStore implements Closeable {
      */
     public long getIndexStoreSize() {
         long totalSize = 0L;
-        if (!tubeConfig.isEnableMemStore()) {
+        if (tubeConfig.isEnableMemStore()) {
             this.writeCacheMutex.readLock().lock();
             try {
                 if (this.msgMemStore.getCurMsgCount() > 0) {
@@ -698,7 +711,7 @@ public class MessageStore implements Closeable {
      */
     public long getDataStoreSize() {
         long totalSize = 0L;
-        if (!tubeConfig.isEnableMemStore()) {
+        if (tubeConfig.isEnableMemStore()) {
             this.writeCacheMutex.readLock().lock();
             try {
                 if (this.msgMemStore.getCurMsgCount() > 0) {
@@ -766,26 +779,27 @@ public class MessageStore implements Closeable {
      * @throws IOException      the exception during processing
      */
     private boolean triggerFlushAndAddMsg(boolean needAdd, boolean isTimeTrigger,
-                                          int partitionId, int keyCode,
-                                          long receivedTime, ByteBuffer indexEntry,
-                                          int dataLength, ByteBuffer dataEntry,
-                                          AppendResult appendResult) throws IOException {
+            int partitionId, int keyCode,
+            long receivedTime, ByteBuffer indexEntry,
+            int dataLength, ByteBuffer dataEntry,
+            AppendResult appendResult) throws IOException {
         long startTime;
         writeCacheMutex.writeLock().lock();
         try {
             if (!isFlushOngoing.get() && hasFlushBeenTriggered.compareAndSet(false, true)) {
                 this.executor.execute(new Runnable() {
+
                     @Override
                     public void run() {
-                        long startTime2 = System.currentTimeMillis();
                         try {
                             final StringBuilder strBuffer = new StringBuilder(512);
-                            flush(startTime2, strBuffer);
+                            flush(strBuffer);
                         } catch (Throwable e) {
                             logger.error("[Data Store] Error during flush", e);
                         } finally {
-                            msgStoreStatsHolder.addCacheFlushTime(
-                                    (System.currentTimeMillis() - startTime2), isTimeTrigger);
+                            if (isTimeTrigger) {
+                                msgStoreStatsHolder.addCacheTimeoutFlush();
+                            }
                         }
                     }
                 });
@@ -819,7 +833,8 @@ public class MessageStore implements Closeable {
         return false;
     }
 
-    private void flush(long startTime, StringBuilder strBuffer) throws IOException {
+    private void flush(StringBuilder strBuffer) throws IOException {
+        long startTime = System.currentTimeMillis();
         flushMutex.lock();
         this.lastMemFlushTime.set(System.currentTimeMillis());
         try {

@@ -17,13 +17,19 @@
  * under the License.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Divider } from 'antd';
 import i18n from '@/i18n';
-import { consumptionForm } from '@/metas/consumption';
+import { useLoadMeta, ConsumeMetaType } from '@/metas';
 
-const getContent = () => {
-  return consumptionForm.map(item => {
+export const useConsumeFormContent = (mqType = '') => {
+  const { Entity } = useLoadMeta<ConsumeMetaType>('consume', mqType);
+
+  const entityFields = useMemo(() => {
+    return Entity ? new Entity().renderRow() : [];
+  }, [Entity]);
+
+  return entityFields?.map(item => {
     const obj = { ...item };
     if (typeof obj.suffix !== 'string') {
       delete obj.suffix;
@@ -45,16 +51,13 @@ export const getFormContent = (
   noExtraForm: boolean,
   formData: Record<string, any> = {},
   suffixContent,
+  consumeFormContent = [],
 ) => {
   const array = [
     {
-      type: (
-        <Divider orientation="left">
-          {i18n.t('pages.ApprovalDetail.ConsumeConfig.BasicInfo')}
-        </Divider>
-      ),
+      type: <Divider orientation="left">{i18n.t('pages.Approvals.Type.Consume')}</Divider>,
     },
-    ...(getContent() || []),
+    ...consumeFormContent,
   ];
 
   const extraForm =
@@ -64,7 +67,7 @@ export const getFormContent = (
             type: 'input',
             label: i18n.t('pages.ApprovalDetail.ConsumeConfig.ConsumerGroup'),
             name: ['form', 'consumerGroup'],
-            initialValue: formData.consumptionInfo?.consumerGroup,
+            initialValue: formData.consumeInfo?.consumerGroup,
             rules: [{ required: true }],
             props: {
               disabled: isFinished,

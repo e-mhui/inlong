@@ -17,7 +17,6 @@
 
 package org.apache.inlong.manager.client.api.impl;
 
-import com.github.pagehelper.PageInfo;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -29,12 +28,16 @@ import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.InlongClient;
 import org.apache.inlong.manager.client.api.InlongCluster;
 import org.apache.inlong.manager.client.api.InlongGroup;
-import org.apache.inlong.manager.common.enums.SimpleGroupStatus;
-import org.apache.inlong.manager.common.enums.SimpleSourceStatus;
 import org.apache.inlong.manager.client.api.inner.client.ClientFactory;
 import org.apache.inlong.manager.client.api.inner.client.InlongClusterClient;
 import org.apache.inlong.manager.client.api.inner.client.InlongGroupClient;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
+import org.apache.inlong.manager.common.enums.SimpleGroupStatus;
+import org.apache.inlong.manager.common.enums.SimpleSourceStatus;
+import org.apache.inlong.manager.common.enums.SortStatus;
+import org.apache.inlong.manager.common.util.HttpUtils;
+import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.pojo.cluster.BindTagRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterInfo;
 import org.apache.inlong.manager.pojo.cluster.ClusterNodeRequest;
@@ -44,13 +47,14 @@ import org.apache.inlong.manager.pojo.cluster.ClusterRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagPageRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagRequest;
 import org.apache.inlong.manager.pojo.cluster.ClusterTagResponse;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.group.InlongGroupBriefInfo;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.group.InlongGroupPageRequest;
 import org.apache.inlong.manager.pojo.group.InlongGroupStatusInfo;
+import org.apache.inlong.manager.pojo.sort.SortStatusInfo;
+import org.apache.inlong.manager.pojo.sort.SortStatusRequest;
 import org.apache.inlong.manager.pojo.source.StreamSource;
-import org.apache.inlong.manager.common.util.HttpUtils;
-import org.apache.inlong.manager.common.util.Preconditions;
 
 import java.util.List;
 import java.util.Map;
@@ -108,17 +112,17 @@ public class InlongClientImpl implements InlongClient {
 
     @Override
     public List<InlongGroup> listGroup(String expr, int status, int pageNum, int pageSize) {
-        PageInfo<InlongGroupBriefInfo> pageInfo = groupClient.listGroups(expr, status, pageNum,
-                pageSize);
+        PageResult<InlongGroupBriefInfo> pageInfo = groupClient.listGroups(expr, status, pageNum, pageSize);
         if (CollectionUtils.isEmpty(pageInfo.getList())) {
             return Lists.newArrayList();
-        } else {
-            return pageInfo.getList().stream().map(briefInfo -> {
-                String groupId = briefInfo.getInlongGroupId();
-                InlongGroupInfo groupInfo = groupClient.getGroupInfo(groupId);
-                return new InlongGroupImpl(groupInfo, configuration);
-            }).collect(Collectors.toList());
         }
+
+        return pageInfo.getList().stream()
+                .map(info -> {
+                    String groupId = info.getInlongGroupId();
+                    InlongGroupInfo groupInfo = groupClient.getGroupInfo(groupId);
+                    return new InlongGroupImpl(groupInfo, configuration);
+                }).collect(Collectors.toList());
     }
 
     @Override
@@ -127,8 +131,9 @@ public class InlongClientImpl implements InlongClient {
         request.setGroupIdList(groupIds);
         request.setListSources(true);
 
-        PageInfo<InlongGroupBriefInfo> pageInfo = groupClient.listGroups(request);
+        PageResult<InlongGroupBriefInfo> pageInfo = groupClient.listGroups(request);
         List<InlongGroupBriefInfo> briefInfos = pageInfo.getList();
+
         Map<String, InlongGroupStatusInfo> groupStatusMap = Maps.newHashMap();
         if (CollectionUtils.isNotEmpty(briefInfos)) {
             briefInfos.forEach(briefInfo -> {
@@ -148,6 +153,26 @@ public class InlongClientImpl implements InlongClient {
     }
 
     @Override
+    public Map<String, InlongGroupStatusInfo> listGroupStatus(List<String> groupIds, String credentials) {
+        Map<String, InlongGroupStatusInfo> groupStatusMap = listGroupStatus(groupIds);
+
+        // sort status info
+        SortStatusRequest statusRequest = new SortStatusRequest();
+        statusRequest.setInlongGroupIds(groupIds);
+        statusRequest.setCredentials(credentials);
+        List<SortStatusInfo> sortStatusInfos = groupClient.listSortStatus(statusRequest);
+
+        if (CollectionUtils.isNotEmpty(sortStatusInfos)) {
+            Map<String, SortStatus> sortStatusMap = sortStatusInfos.stream()
+                    .collect(Collectors.toMap(SortStatusInfo::getInlongGroupId, SortStatusInfo::getSortStatus));
+            groupStatusMap.forEach((groupId, groupStatusInfo) -> groupStatusInfo
+                    .setSortStatus(sortStatusMap.getOrDefault(groupId, SortStatus.NOT_EXISTS)));
+        }
+
+        return groupStatusMap;
+    }
+
+    @Override
     public InlongGroup getGroup(String groupId) {
         InlongGroupInfo groupInfo = groupClient.getGroupInfo(groupId);
         if (groupInfo == null) {
@@ -158,101 +183,111 @@ public class InlongClientImpl implements InlongClient {
 
     @Override
     public Integer saveTag(ClusterTagRequest request) {
-        Preconditions.checkNotNull(request, "inlong cluster request cannot be empty");
-        Preconditions.checkNotNull(request.getClusterTag(), "cluster tag cannot be empty");
+        Preconditions.expectNotNull(request, "inlong cluster request cannot be empty");
+        Preconditions.expectNotBlank(request.getClusterTag(), ErrorCodeEnum.INVALID_PARAMETER,
+                "cluster tag cannot be empty");
         return clusterClient.saveTag(request);
     }
 
     @Override
     public ClusterTagResponse getTag(Integer id) {
-        Preconditions.checkNotNull(id, "inlong cluster tag id cannot be empty");
+        Preconditions.expectNotNull(id, "inlong cluster tag id cannot be empty");
         return clusterClient.getTag(id);
     }
 
     @Override
-    public PageInfo<ClusterTagResponse> listTag(ClusterTagPageRequest request) {
+    public PageResult<ClusterTagResponse> listTag(ClusterTagPageRequest request) {
         return clusterClient.listTag(request);
     }
 
     @Override
     public Boolean updateTag(ClusterTagRequest request) {
-        Preconditions.checkNotNull(request, "inlong cluster request cannot be empty");
-        Preconditions.checkNotNull(request.getClusterTag(), "inlong cluster tag cannot be empty");
-        Preconditions.checkNotNull(request.getId(), "cluster tag id cannot be empty");
+        Preconditions.expectNotNull(request, "inlong cluster request cannot be empty");
+        Preconditions.expectNotBlank(request.getClusterTag(), ErrorCodeEnum.INVALID_PARAMETER,
+                "inlong cluster tag cannot be empty");
+        Preconditions.expectNotNull(request.getId(), "cluster tag id cannot be empty");
         return clusterClient.updateTag(request);
     }
 
     @Override
     public Boolean deleteTag(Integer id) {
-        Preconditions.checkNotNull(id, "cluster tag id cannot be empty");
+        Preconditions.expectNotNull(id, "cluster tag id cannot be empty");
         return clusterClient.deleteTag(id);
     }
 
     @Override
     public Integer saveCluster(ClusterRequest request) {
-        Preconditions.checkNotNull(request, "inlong cluster request cannot be empty");
+        Preconditions.expectNotNull(request, "inlong cluster request cannot be empty");
         return clusterClient.saveCluster(request);
     }
 
     @Override
     public ClusterInfo get(Integer id) {
-        Preconditions.checkNotNull(id, "inlong cluster id cannot be empty");
+        Preconditions.expectNotNull(id, "inlong cluster id cannot be empty");
         return clusterClient.get(id);
     }
 
     @Override
-    public ClusterInfo list(ClusterPageRequest request) {
+    public PageResult<ClusterInfo> list(ClusterPageRequest request) {
         return clusterClient.list(request);
     }
 
     @Override
     public Boolean update(ClusterRequest request) {
-        Preconditions.checkNotNull(request, "inlong cluster info cannot be empty");
-        Preconditions.checkNotNull(request.getId(), "inlong cluster id cannot be empty");
+        Preconditions.expectNotNull(request, "inlong cluster info cannot be empty");
+        Preconditions.expectNotNull(request.getId(), "inlong cluster id cannot be empty");
         return clusterClient.update(request);
     }
 
     @Override
     public Boolean bindTag(BindTagRequest request) {
-        Preconditions.checkNotNull(request, "inlong cluster info cannot be empty");
-        Preconditions.checkNotNull(request.getClusterTag(), "cluster tag cannot be empty");
+        Preconditions.expectNotNull(request, "inlong cluster info cannot be empty");
+        Preconditions.expectNotBlank(request.getClusterTag(), ErrorCodeEnum.INVALID_PARAMETER,
+                "cluster tag cannot be empty");
         return clusterClient.bindTag(request);
     }
 
     @Override
     public Boolean delete(Integer id) {
-        Preconditions.checkNotNull(id, "cluster id cannot be empty");
+        Preconditions.expectNotNull(id, "cluster id cannot be empty");
         return clusterClient.delete(id);
     }
 
     @Override
     public Integer saveNode(ClusterNodeRequest request) {
-        Preconditions.checkNotNull(request, "cluster node info cannot be empty");
+        Preconditions.expectNotNull(request, "cluster node info cannot be empty");
         return clusterClient.saveNode(request);
     }
 
     @Override
     public ClusterNodeResponse getNode(Integer id) {
-        Preconditions.checkNotNull(id, "cluster node id cannot be empty");
+        Preconditions.expectNotNull(id, "cluster node id cannot be empty");
         return clusterClient.getNode(id);
     }
 
     @Override
-    public PageInfo<ClusterNodeResponse> listNode(ClusterPageRequest request) {
-        Preconditions.checkNotNull(request.getParentId(), "Cluster id cannot be empty");
+    public PageResult<ClusterNodeResponse> listNode(ClusterPageRequest request) {
+        Preconditions.expectNotNull(request.getParentId(), "parentId cannot be empty");
         return clusterClient.listNode(request);
     }
 
     @Override
+    public List<ClusterNodeResponse> listNode(String inlongGroupId, String clusterType, String protocolType) {
+        Preconditions.expectNotBlank(inlongGroupId, ErrorCodeEnum.INVALID_PARAMETER, "inlongGroupId cannot be empty");
+        Preconditions.expectNotBlank(clusterType, ErrorCodeEnum.INVALID_PARAMETER, "clusterType cannot be empty");
+        return clusterClient.listNode(inlongGroupId, clusterType, protocolType);
+    }
+
+    @Override
     public Boolean updateNode(ClusterNodeRequest request) {
-        Preconditions.checkNotNull(request, "inlong cluster node cannot be empty");
-        Preconditions.checkNotNull(request.getId(), "cluster node id cannot be empty");
+        Preconditions.expectNotNull(request, "inlong cluster node cannot be empty");
+        Preconditions.expectNotNull(request.getId(), "cluster node id cannot be empty");
         return clusterClient.updateNode(request);
     }
 
     @Override
     public Boolean deleteNode(Integer id) {
-        Preconditions.checkNotNull(id, "cluster node id cannot be empty");
+        Preconditions.expectNotNull(id, "cluster node id cannot be empty");
         return clusterClient.deleteNode(id);
     }
 

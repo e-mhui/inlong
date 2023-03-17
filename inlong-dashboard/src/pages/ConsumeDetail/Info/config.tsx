@@ -17,12 +17,19 @@
  * under the License.
  */
 
-import { consumptionForm } from '@/metas/consumption';
+import { useMemo } from 'react';
+import { useLoadMeta, ConsumeMetaType } from '@/metas';
 import { excludeObjectArray } from '@/utils';
 
-export const getFormContent = ({ editing, isCreate }) => {
+export const useFormContent = ({ mqType, editing, isCreate }) => {
+  const { Entity } = useLoadMeta<ConsumeMetaType>('consume', mqType);
+
+  const entityFields = useMemo(() => {
+    return Entity ? new Entity().renderRow() : [];
+  }, [Entity]);
+
   const excludeKeys = isCreate ? ['masterUrl'] : [];
-  const fields = excludeObjectArray(excludeKeys, consumptionForm);
+  const fields = excludeObjectArray(excludeKeys, entityFields);
 
   return isCreate
     ? fields
@@ -43,13 +50,7 @@ export const getFormContent = ({ editing, isCreate }) => {
 function transType(editing: boolean, conf) {
   const arr = [
     {
-      name: [
-        'inCharges',
-        'mqExtInfo.isDlq',
-        'mqExtInfo.deadLetterTopic',
-        'mqExtInfo.isRlq',
-        'mqExtInfo.retryLetterTopic',
-      ],
+      name: ['isDlq', 'deadLetterTopic', 'isRlq', 'retryLetterTopic'],
       as: 'text',
       active: !editing,
     },

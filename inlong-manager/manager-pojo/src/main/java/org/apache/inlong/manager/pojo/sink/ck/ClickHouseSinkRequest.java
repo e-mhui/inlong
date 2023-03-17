@@ -23,8 +23,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import org.apache.inlong.manager.common.consts.SinkType;
-import org.apache.inlong.manager.pojo.sink.SinkRequest;
 import org.apache.inlong.manager.common.util.JsonTypeDefine;
+import org.apache.inlong.manager.pojo.sink.SinkRequest;
 
 /**
  * ClickHouse sink request.
@@ -66,8 +66,7 @@ public class ClickHouseSinkRequest extends SinkRequest {
     @ApiModelProperty("Partition strategy, support: BALANCE, RANDOM, HASH")
     private String partitionStrategy;
 
-    @ApiModelProperty(value = "Partition files, separate with commas",
-            notes = "Necessary when partitionStrategy is HASH, must be one of the field list")
+    @ApiModelProperty(value = "Partition files, separate with commas", notes = "Necessary when partitionStrategy is HASH, must be one of the field list")
     private String partitionFields;
 
     @ApiModelProperty("Key field names, separate with commas")
@@ -81,6 +80,12 @@ public class ClickHouseSinkRequest extends SinkRequest {
 
     @ApiModelProperty("Table order information")
     private String orderBy;
+
+    @ApiModelProperty(value = "Message time-to-live duration")
+    private Integer ttl;
+
+    @ApiModelProperty(value = "The unit of message's time-to-live duration")
+    private String ttlUnit;
 
     @ApiModelProperty("Table primary key")
     private String primaryKey;

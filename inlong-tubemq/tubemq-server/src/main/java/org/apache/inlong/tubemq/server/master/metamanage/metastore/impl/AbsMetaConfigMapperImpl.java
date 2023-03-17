@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -57,6 +57,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
+
     protected static final Logger logger =
             LoggerFactory.getLogger(AbsMetaConfigMapperImpl.class);
     // master configure
@@ -118,12 +119,12 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean addOrUpdClusterDefSetting(BaseEntity opEntity,
-                                             int brokerPort, int brokerTlsPort,
-                                             int brokerWebPort, int maxMsgSizeMB,
-                                             int qryPriorityId, Boolean flowCtrlEnable,
-                                             int flowRuleCnt, String flowCtrlInfo,
-                                             TopicPropGroup topicProps,
-                                             StringBuilder strBuff, ProcessResult result) {
+            int brokerPort, int brokerTlsPort,
+            int brokerWebPort, int maxMsgSizeMB,
+            int qryPriorityId, EnableStatus flowCtrlEnable,
+            int flowRuleCnt, String flowCtrlInfo,
+            TopicPropGroup topicProps,
+            StringBuilder strBuff, ProcessResult result) {
         Integer lid = null;
         boolean isAddOp = false;
         String printPrefix = "[updClusterConfig], ";
@@ -193,7 +194,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean addOrUpdBrokerConfig(boolean isAddOp, BrokerConfEntity entity,
-                                        StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         Integer lid = null;
         BrokerConfEntity curEntity = null;
         BrokerConfEntity newEntity;
@@ -242,8 +243,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean changeBrokerConfStatus(BaseEntity opEntity,
-                                          int brokerId, ManageStatus newMngStatus,
-                                          StringBuilder strBuff, ProcessResult result) {
+            int brokerId, ManageStatus newMngStatus,
+            StringBuilder strBuff, ProcessResult result) {
         Integer lid = null;
         BrokerConfEntity curEntity;
         BrokerConfEntity newEntity;
@@ -277,7 +278,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean delBrokerConfInfo(String operator, int brokerId, boolean rsvData,
-                                     StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         Integer lid = null;
         BrokerConfEntity curEntity;
         String printPrefix = "[delBrokerConf], ";
@@ -347,8 +348,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public Map<Integer, BrokerConfEntity> getBrokerConfInfo(Set<Integer> brokerIdSet,
-                                                            Set<String> brokerIpSet,
-                                                            BrokerConfEntity qryEntity) {
+            Set<String> brokerIpSet,
+            BrokerConfEntity qryEntity) {
         return brokerConfigMapper.getBrokerConfInfo(brokerIdSet, brokerIpSet, qryEntity);
     }
 
@@ -366,14 +367,14 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean addOrUpdTopicCtrlConf(boolean isAddOp, TopicCtrlEntity entity,
-                                         StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         return innAddOrUpdTopicCtrlConf(true, isAddOp, entity, strBuff, result);
     }
 
     @Override
     public boolean insertTopicCtrlConf(BaseEntity opEntity,
-                                       String topicName, Boolean enableTopicAuth,
-                                       StringBuilder strBuff, ProcessResult result) {
+            String topicName, EnableStatus enableTopicAuth,
+            StringBuilder strBuff, ProcessResult result) {
         TopicCtrlEntity entity =
                 new TopicCtrlEntity(opEntity, topicName);
         entity.updModifyInfo(opEntity.getDataVerId(),
@@ -384,13 +385,13 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean insertTopicCtrlConf(TopicCtrlEntity entity,
-                                       StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         return innAddOrUpdTopicCtrlConf(false, false, entity, strBuff, result);
     }
 
     @Override
     public boolean delTopicCtrlConf(String operator, String topicName,
-                                    StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         Integer lid = null;
         TopicCtrlEntity curEntity;
         String printPrefix = "[delTopicCtrlConf], ";
@@ -451,10 +452,9 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
         ClusterSettingEntity clusterSettingEntity = getClusterDefSetting(false);
         int maxMsgSizeInMB = clusterSettingEntity.getMaxMsgSizeInMB();
         TopicCtrlEntity topicCtrlEntity = topicCtrlMapper.getTopicCtrlConf(topicName);
-        if (topicCtrlEntity != null) {
-            if (topicCtrlEntity.getMaxMsgSizeInMB() != TBaseConstants.META_VALUE_UNDEFINED) {
-                maxMsgSizeInMB = topicCtrlEntity.getMaxMsgSizeInMB();
-            }
+        if (topicCtrlEntity != null
+                && topicCtrlEntity.getMaxMsgSizeInMB() != TBaseConstants.META_VALUE_UNDEFINED) {
+            maxMsgSizeInMB = topicCtrlEntity.getMaxMsgSizeInMB();
         }
         return maxMsgSizeInMB;
     }
@@ -466,8 +466,14 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public Map<String, TopicCtrlEntity> getTopicCtrlConf(Set<String> topicNameSet,
-                                                         TopicCtrlEntity qryEntity) {
+            TopicCtrlEntity qryEntity) {
         return topicCtrlMapper.getTopicCtrlConf(topicNameSet, qryEntity);
+    }
+
+    @Override
+    public Map<String, Integer> getMaxMsgSizeInBByTopics(int defMaxMsgSizeInB,
+            Set<String> topicNameSet) {
+        return topicCtrlMapper.getMaxMsgSizeInBByTopics(defMaxMsgSizeInB, topicNameSet);
     }
 
     /**
@@ -480,14 +486,9 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
      * @return true if success otherwise false
      */
     private boolean addTopicCtrlConfIfAbsent(BaseEntity opEntity, String topicName,
-                                             StringBuilder strBuff, ProcessResult result) {
-        int maxMsgSizeInMB = TBaseConstants.META_MIN_ALLOWED_MESSAGE_SIZE_MB;
-        ClusterSettingEntity defSetting = getClusterDefSetting(false);
-        if (defSetting != null) {
-            maxMsgSizeInMB = defSetting.getMaxMsgSizeInMB();
-        }
+            StringBuilder strBuff, ProcessResult result) {
         TopicCtrlEntity entity = new TopicCtrlEntity(opEntity, topicName,
-                TBaseConstants.META_VALUE_UNDEFINED, maxMsgSizeInMB);
+                TBaseConstants.META_VALUE_UNDEFINED, TBaseConstants.META_VALUE_UNDEFINED);
         return innAddOrUpdTopicCtrlConf(false, true, entity, strBuff, result);
     }
 
@@ -502,8 +503,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
      * @return true if success otherwise false
      */
     private boolean innAddOrUpdTopicCtrlConf(boolean chkConsistent, boolean isAddOpOrOnlyAdd,
-                                             TopicCtrlEntity entity, StringBuilder strBuff,
-                                             ProcessResult result) {
+            TopicCtrlEntity entity, StringBuilder strBuff,
+            ProcessResult result) {
         Integer lid = null;
         TopicCtrlEntity curEntity;
         TopicCtrlEntity newEntity;
@@ -524,26 +525,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
                     strBuff.delete(0, strBuff.length());
                     return result.isSuccess();
                 }
-                if (entity.getTopicId() == TBaseConstants.META_VALUE_UNDEFINED
-                        || entity.getMaxMsgSizeInMB() == TBaseConstants.META_VALUE_UNDEFINED) {
-                    int topicId = entity.getTopicId();
-                    int maxMsgSizeInMB = entity.getMaxMsgSizeInMB();
-                    if (topicId == TBaseConstants.META_VALUE_UNDEFINED) {
-                        topicId = TServerConstants.TOPIC_ID_DEF;
-                    }
-                    if (maxMsgSizeInMB == TBaseConstants.META_VALUE_UNDEFINED) {
-                        maxMsgSizeInMB = TBaseConstants.META_MIN_ALLOWED_MESSAGE_SIZE_MB;
-                        ClusterSettingEntity defSetting = getClusterDefSetting(false);
-                        if (defSetting != null) {
-                            maxMsgSizeInMB = defSetting.getMaxMsgSizeInMB();
-                        }
-                    }
-                    newEntity = new TopicCtrlEntity(entity, entity.getTopicName(), topicId, maxMsgSizeInMB);
-                    topicCtrlMapper.addTopicCtrlConf(newEntity, strBuff, result);
-
-                } else {
-                    topicCtrlMapper.addTopicCtrlConf(entity, strBuff, result);
-                }
+                entity.fillEmptyValues(getClusterDefSetting(false));
+                topicCtrlMapper.addTopicCtrlConf(entity, strBuff, result);
             } else {
                 if (isAddOpOrOnlyAdd) {
                     if (chkConsistent) {
@@ -588,7 +571,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public void addSystemTopicDeploy(int brokerId, int brokerPort,
-                                     String brokerIp, StringBuilder strBuff) {
+            String brokerIp, StringBuilder strBuff) {
         BaseEntity opEntity = new BaseEntity("systemSelf", new Date());
         TopicPropGroup topicPropInfo = new TopicPropGroup();
         topicPropInfo.setNumTopicStores(TServerConstants.OFFSET_HISTORY_NUMSTORES);
@@ -602,14 +585,15 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean addOrUpdTopicDeployInfo(boolean isAddOp, TopicDeployEntity entity,
-                                           StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         TopicDeployEntity curEntity;
         TopicDeployEntity newEntity;
         String printPrefix = "[addTopicDeployConf], ";
         Integer topicLockId = null;
         Integer brokerLockId = null;
         // add topic control configure
-        addTopicCtrlConfIfAbsent(entity, entity.getTopicName(), strBuff, result);
+        BaseEntity opEntity = new BaseEntity("systemSelf", new Date());
+        addTopicCtrlConfIfAbsent(opEntity, entity.getTopicName(), strBuff, result);
         // execute add or update operation
         try {
             // lock topicName meta-lock
@@ -653,11 +637,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
                     newProps.updModifyInfo(brokerEntity.getTopicProps());
                     newEntity = new TopicDeployEntity(entity,
                             entity.getBrokerId(), entity.getTopicName(), newProps);
-                    int topicId = entity.getTopicId();
-                    if (entity.getTopicId() == TBaseConstants.META_VALUE_UNDEFINED) {
-                        topicId = TServerConstants.TOPIC_ID_DEF;
-                    }
-                    newEntity.updModifyInfo(entity.getDataVerId(), topicId,
+                    newEntity.updModifyInfo(entity.getDataVerId(), entity.getTopicId(),
                             brokerEntity.getBrokerPort(), brokerEntity.getBrokerIp(),
                             entity.getTopicStatus(), entity.getTopicProps());
                     topicDeployMapper.addTopicDeployConf(newEntity, strBuff, result);
@@ -704,8 +684,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean updTopicDeployStatusInfo(BaseEntity opEntity, int brokerId,
-                                            String topicName, TopicStatus topicStatus,
-                                            StringBuilder strBuff, ProcessResult result) {
+            String topicName, TopicStatus topicStatus,
+            StringBuilder strBuff, ProcessResult result) {
         TopicDeployEntity curEntity;
         TopicDeployEntity newEntity;
         String printPrefix = "[updTopicDeployConf], ";
@@ -774,7 +754,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean delTopicDeployInfo(String operator, int brokerId, String topicName,
-                                      StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         TopicDeployEntity curEntity;
         String printPrefix = "[delTopicDeployConf], ";
         Integer topicLockId = null;
@@ -826,14 +806,14 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public Map<String, List<TopicDeployEntity>> getTopicDeployInfoMap(Set<String> topicNameSet,
-                                                                      Set<Integer> brokerIdSet,
-                                                                      TopicDeployEntity qryEntity) {
+            Set<Integer> brokerIdSet,
+            TopicDeployEntity qryEntity) {
         return topicDeployMapper.getTopicConfMap(topicNameSet, brokerIdSet, qryEntity);
     }
 
     @Override
     public Map<Integer, List<TopicDeployEntity>> getTopicDeployInfoMap(Set<String> topicNameSet,
-                                                                       Set<Integer> brokerIdSet) {
+            Set<Integer> brokerIdSet) {
         Map<Integer, BrokerConfEntity> qryBrokerInfoMap =
                 brokerConfigMapper.getBrokerConfInfo(brokerIdSet, null, null);
         if (qryBrokerInfoMap.isEmpty()) {
@@ -869,6 +849,11 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
     }
 
     @Override
+    public Set<Integer> getDeployedBrokerIdByTopic(Set<String> topicNameSet) {
+        return topicDeployMapper.getDeployedBrokerIdByTopic(topicNameSet);
+    }
+
+    @Override
     public Set<String> getDeployedTopicSet() {
         return topicDeployMapper.getDeployedTopicSet();
     }
@@ -877,16 +862,16 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean addOrUpdGroupResCtrlConf(boolean isAddOp, GroupResCtrlEntity entity,
-                                            StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         return addOrUpdGroupCtrlConf(true,
                 isAddOp, entity, strBuff, result);
     }
 
     @Override
     public boolean insertGroupCtrlConf(BaseEntity opEntity, String groupName,
-                                       int qryPriorityId, Boolean flowCtrlEnable,
-                                       int flowRuleCnt, String flowCtrlRuleInfo,
-                                       StringBuilder strBuff, ProcessResult result) {
+            int qryPriorityId, EnableStatus flowCtrlEnable,
+            int flowRuleCnt, String flowCtrlRuleInfo,
+            StringBuilder strBuff, ProcessResult result) {
         GroupResCtrlEntity newEntity = new GroupResCtrlEntity(opEntity, groupName);
         newEntity.updModifyInfo(opEntity.getDataVerId(), null,
                 TBaseConstants.META_VALUE_UNDEFINED, qryPriorityId,
@@ -897,8 +882,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean insertGroupCtrlConf(BaseEntity opEntity, String groupName,
-                                       Boolean resChkEnable, int allowedB2CRate,
-                                       StringBuilder strBuff, ProcessResult result) {
+            EnableStatus resChkEnable, int allowedB2CRate,
+            StringBuilder strBuff, ProcessResult result) {
         GroupResCtrlEntity newEntity = new GroupResCtrlEntity(opEntity, groupName);
         newEntity.updModifyInfo(opEntity.getDataVerId(), resChkEnable, allowedB2CRate,
                 TBaseConstants.META_VALUE_UNDEFINED, null,
@@ -909,7 +894,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean insertGroupCtrlConf(GroupResCtrlEntity entity,
-                                       StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         return addOrUpdGroupCtrlConf(false, false, entity, strBuff, result);
     }
 
@@ -923,7 +908,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
      * @return true if success otherwise false
      */
     private boolean addGroupCtrlConfIfAbsent(BaseEntity opEntity, String groupName,
-                                             StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         GroupResCtrlEntity resCtrlEntity =
                 groupResCtrlMapper.getGroupResCtrlConf(groupName);
         if (resCtrlEntity != null) {
@@ -946,8 +931,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
      * @return true if success otherwise false
      */
     private boolean addOrUpdGroupCtrlConf(boolean chkConsistent, boolean isAddOpOrOnlyAdd,
-                                          GroupResCtrlEntity entity, StringBuilder strBuff,
-                                          ProcessResult result) {
+            GroupResCtrlEntity entity, StringBuilder strBuff,
+            ProcessResult result) {
         Integer lid = null;
         boolean addRecord = true;
         GroupResCtrlEntity curEntity;
@@ -968,6 +953,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
                     strBuff.delete(0, strBuff.length());
                     return result.isSuccess();
                 }
+                entity.fillEmptyValues();
                 groupResCtrlMapper.addGroupResCtrlConf(entity, strBuff, result);
             } else {
                 if (isAddOpOrOnlyAdd) {
@@ -1011,7 +997,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean delGroupCtrlConf(String operator, String groupName,
-                                    StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         Integer lid = null;
         GroupResCtrlEntity curEntity;
         String printPrefix = "[delGroupCtrlConf], ";
@@ -1055,7 +1041,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public Map<String, GroupResCtrlEntity> getGroupCtrlConf(Set<String> groupSet,
-                                                            GroupResCtrlEntity qryEntity) {
+            GroupResCtrlEntity qryEntity) {
         return groupResCtrlMapper.getGroupResCtrlConf(groupSet, qryEntity);
     }
 
@@ -1068,16 +1054,16 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean addOrUpdConsumeCtrlInfo(boolean isAddOp, GroupConsumeCtrlEntity entity,
-                                           StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         return addOrUpdConsumeCtrlConf(true, isAddOp, entity, strBuff, result);
     }
 
     @Override
     public boolean insertConsumeCtrlInfo(BaseEntity opEntity, String groupName,
-                                         String topicName, Boolean enableCsm,
-                                         String disReason, Boolean enableFlt,
-                                         String fltCondStr, StringBuilder strBuff,
-                                         ProcessResult result) {
+            String topicName, EnableStatus enableCsm,
+            String disReason, EnableStatus enableFlt,
+            String fltCondStr, StringBuilder strBuff,
+            ProcessResult result) {
         GroupConsumeCtrlEntity entity =
                 new GroupConsumeCtrlEntity(opEntity, groupName, topicName);
         entity.updModifyInfo(opEntity.getDataVerId(),
@@ -1087,7 +1073,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean insertConsumeCtrlInfo(GroupConsumeCtrlEntity entity,
-                                         StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         return addOrUpdConsumeCtrlConf(false, false, entity, strBuff, result);
     }
 
@@ -1102,8 +1088,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
      * @return true if success otherwise false
      */
     private boolean addOrUpdConsumeCtrlConf(boolean chkConsistent, boolean isAddOpOrOnlyAdd,
-                                            GroupConsumeCtrlEntity entity, StringBuilder strBuff,
-                                            ProcessResult result) {
+            GroupConsumeCtrlEntity entity, StringBuilder strBuff,
+            ProcessResult result) {
         boolean addRecord = true;
         Integer topicLockId = null;
         Integer groupLockId = null;
@@ -1111,9 +1097,10 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
         GroupConsumeCtrlEntity newEntity;
         String printPrefix = "[addConsumeCtrlConf], ";
         // append topic control configure
-        addTopicCtrlConfIfAbsent(entity, entity.getTopicName(), strBuff, result);
+        BaseEntity opEntity = new BaseEntity("systemSelf", new Date());
+        addTopicCtrlConfIfAbsent(opEntity, entity.getTopicName(), strBuff, result);
         // append group control configure
-        addGroupCtrlConfIfAbsent(entity, entity.getGroupName(), strBuff, result);
+        addGroupCtrlConfIfAbsent(opEntity, entity.getGroupName(), strBuff, result);
         // execute add or update operation
         try {
             // lock topicName meta-lock
@@ -1133,6 +1120,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
                         strBuff.delete(0, strBuff.length());
                         return result.isSuccess();
                     }
+                    entity.fillEmptyValues();
                     consumeCtrlMapper.addGroupConsumeCtrlConf(entity, strBuff, result);
                 } else {
                     if (isAddOpOrOnlyAdd) {
@@ -1181,8 +1169,8 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
 
     @Override
     public boolean delConsumeCtrlConf(String operator,
-                                      String groupName, String topicName,
-                                      StringBuilder strBuff, ProcessResult result) {
+            String groupName, String topicName,
+            StringBuilder strBuff, ProcessResult result) {
         Integer topicLockId = null;
         Integer groupLockId = null;
         GroupConsumeCtrlEntity curEntity;
@@ -1337,7 +1325,7 @@ public abstract class AbsMetaConfigMapperImpl implements MetaConfigMapper {
     }
 
     private boolean logExceptionInfo(Throwable e, String printPrefix,
-                                     StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         strBuff.delete(0, strBuff.length());
         strBuff.append(printPrefix).append("failed to lock meta-lock.");
         logger.warn(strBuff.toString(), e);

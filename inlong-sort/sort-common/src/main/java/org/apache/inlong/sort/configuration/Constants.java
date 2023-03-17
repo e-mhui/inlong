@@ -18,7 +18,6 @@
 package org.apache.inlong.sort.configuration;
 
 import java.time.Duration;
-
 import static org.apache.inlong.sort.configuration.ConfigOptions.key;
 
 /**
@@ -60,8 +59,14 @@ public class Constants {
 
     public static final String HIVE_SINK_ORC_PREFIX = HIVE_SINK_PREFIX + "orc.";
 
+    public static final String GROUP_ID = "groupId";
+
+    public static final String STREAM_ID = "streamId";
+
+    public static final String NODE_ID = "nodeId";
+
     // ------------------------------------------------------------------------
-    //  Operator uid
+    // Operator uid
     // ------------------------------------------------------------------------
     public static final String SOURCE_UID = "source_uid";
 
@@ -82,13 +87,25 @@ public class Constants {
     public static final String PULSAR_SOURCE_PREFIX = "pulsar.source.";
 
     // ------------------------------------------------------------------------
-    //  Common configs
+    // Common configs
     // ------------------------------------------------------------------------
+    /**
+     * The pipeline name is the key of configuration
+     * that represents the configuration of {@link this#JOB_NAME} in Flink Table API
+     */
+    public static final String PIPELINE_NAME = "pipeline.name";
+
     /**
      * The ID of the cluster, used to separate multiple clusters.
      */
     public static final ConfigOption<String> CLUSTER_ID = key("cluster-id").noDefaultValue()
             .withDescription("The ID of the cluster, used to separate multiple clusters.");
+
+    /**
+     * The job name of this job, default is 'InLong-Sort-Job'
+     */
+    public static final ConfigOption<String> JOB_NAME = key("job.name").defaultValue("InLong-Sort-Job")
+            .withDescription("The job name of this job");
 
     /**
      * The ZooKeeper quorum to use.
@@ -112,7 +129,7 @@ public class Constants {
             .withDescription("The type of sink, currently only 'clickhouse' and 'iceberg' are supported");
 
     // ------------------------------------------------------------------------
-    //  Operator parallelism configs
+    // Operator parallelism configs
     // ------------------------------------------------------------------------
     public static final ConfigOption<Integer> SOURCE_PARALLELISM = key("source.parallelism").defaultValue(1);
 
@@ -127,7 +144,7 @@ public class Constants {
     public static final ConfigOption<Integer> COMMITTER_PARALLELISM = key("committer.parallelism").defaultValue(1);
 
     // ------------------------------------------------------------------------
-    //  TubeMQ source configs
+    // TubeMQ source configs
     // ------------------------------------------------------------------------
     public static final ConfigOption<String> TUBE_MASTER_ADDRESS = key("tubemq.master.address").noDefaultValue()
             .withDescription("The address of tubeMQ master.");
@@ -152,7 +169,7 @@ public class Constants {
             key("source.event.queue.capacity").defaultValue(1024);
 
     // ------------------------------------------------------------------------
-    //  ZooKeeper Client Settings
+    // ZooKeeper Client Settings
     // ------------------------------------------------------------------------
 
     public static final ConfigOption<Integer> ZOOKEEPER_SESSION_TIMEOUT = key("zookeeper.client.session-timeout")
@@ -184,7 +201,7 @@ public class Constants {
             key("zookeeper.sasl.disable").defaultValue(false);
 
     // ------------------------------------------------------------------------
-    //  Sink field nullable related
+    // Sink field nullable related
     // ------------------------------------------------------------------------
     public static final ConfigOption<Boolean> SINK_FIELD_TYPE_STRING_NULLABLE = key("sink.field.type.string.nullable")
             .defaultValue(false)
@@ -200,13 +217,13 @@ public class Constants {
             key("sink.field.type.long.nullable").defaultValue(true);
 
     // ------------------------------------------------------------------------
-    //  Kafka sink related configs
+    // Kafka sink related configs
     // ------------------------------------------------------------------------
     public static final ConfigOption<Integer> SINK_KAFKA_PRODUCER_POOL_SIZE =
             key("sink.kafka.producer.pool.size").defaultValue(5);
 
     // ------------------------------------------------------------------------
-    //  Hive sink related configs
+    // Hive sink related configs
     // ------------------------------------------------------------------------
 
     public static final ConfigOption<Integer> SINK_HIVE_COMMITTED_PARTITIONS_CACHE_SIZE =
@@ -236,7 +253,7 @@ public class Constants {
                     + "default size is 256KB");
 
     // ------------------------------------------------------------------------
-    //  Checkpoint related configs
+    // Checkpoint related configs
     // ------------------------------------------------------------------------
     public static final ConfigOption<Integer> CHECKPOINT_INTERVAL_MS = key("checkpoint.interval")
             .defaultValue(600000)
@@ -249,7 +266,7 @@ public class Constants {
             key("checkpoint.timeout.ms").defaultValue(600000);
 
     // ------------------------------------------------------------------------
-    //  Metrics related
+    // Metrics related
     // ------------------------------------------------------------------------
     public static final ConfigOption<Boolean> METRICS_ENABLE_OUTPUT =
             key("metrics.enable.output").defaultValue(true);
@@ -264,8 +281,8 @@ public class Constants {
             key("metrics.sink.parallelism").defaultValue(1)
                     .withDeprecatedKeys("metrics.mysql.sink.parallelism");
 
-    public static final String METRICS_TIMESTAMP_AND_WATERMARK_ASSIGNER_UID
-            = "metrics_timestamp_and_watermark_assigner_uid";
+    public static final String METRICS_TIMESTAMP_AND_WATERMARK_ASSIGNER_UID =
+            "metrics_timestamp_and_watermark_assigner_uid";
 
     public static final String METRICS_AGGREGATOR_UID = "metrics_aggregator_uid";
 
@@ -275,13 +292,20 @@ public class Constants {
             .defaultValue(5)
             .withDescription("minutes");
 
-    public static final ConfigOption<String> METRICS_AUDIT_PROXY_HOSTS = key("metrics.audit.proxy.hosts")
-            .noDefaultValue()
-            .withDescription("Audit proxy host address for reporting audit metrics. "
-                    + "e.g. 127.0.0.1:10081,0.0.0.1:10081");
+    public static final ConfigOption<String> METRICS_LABELS =
+            ConfigOptions.key("inlong.metric.labels")
+                    .noDefaultValue()
+                    .withDescription("INLONG metric labels, format is 'key1=value1&key2=value2',"
+                            + "default is 'groupId=xxx&streamId=xxx&nodeId=xxx'");
+
+    public static final ConfigOption<String> METRICS_AUDIT_PROXY_HOSTS =
+            ConfigOptions.key("metrics.audit.proxy.hosts")
+                    .noDefaultValue()
+                    .withDescription("Audit proxy host address for reporting audit metrics. \n"
+                            + "e.g. 127.0.0.1:10081,0.0.0.1:10081");
 
     // ------------------------------------------------------------------------
-    //  Single tenant related
+    // Single tenant related
     // ------------------------------------------------------------------------
     public static final ConfigOption<String> DATAFLOW_INFO_FILE = key("dataflow.info.file").noDefaultValue()
             .withDescription("The file which contains dataflow info for a single tenant job");
@@ -303,7 +327,7 @@ public class Constants {
             .withDescription("The file which is sql script and contains multi statement");
 
     // ------------------------------------------------------------------------
-    //  File format and compression related
+    // File format and compression related
     // ------------------------------------------------------------------------
     public enum CompressionType {
         NONE,

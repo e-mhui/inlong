@@ -17,10 +17,9 @@
 
 package org.apache.inlong.manager.service;
 
-import org.apache.inlong.manager.common.consts.InlongConstants;
+import org.apache.inlong.common.constant.MQType;
 import org.apache.inlong.manager.common.enums.FieldType;
 import org.apache.inlong.manager.common.enums.GroupStatus;
-import org.apache.inlong.manager.common.consts.MQType;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.group.none.InlongNoneMqInfo;
 import org.apache.inlong.manager.pojo.group.pulsar.InlongPulsarInfo;
@@ -50,6 +49,7 @@ public class ServiceBaseTest extends BaseTest {
     public static final String GLOBAL_GROUP_ID = "global_group";
     public static final String GLOBAL_STREAM_ID = "global_stream";
     public static final String GLOBAL_OPERATOR = "admin";
+    public static final String GLOBAL_CLUSTER_NAME = "global_cluster";
     private static final Logger LOGGER = LoggerFactory.getLogger(ServiceBaseTest.class);
 
     @Autowired
@@ -88,7 +88,6 @@ public class ServiceBaseTest extends BaseTest {
         groupInfo.setMqType(mqType);
         groupInfo.setMqResource("test-queue");
         groupInfo.setInCharges(GLOBAL_OPERATOR);
-        groupInfo.setEnableCreateResource(InlongConstants.ENABLE_CREATE_RESOURCE);
         groupService.save(groupInfo.genRequest(), GLOBAL_OPERATOR);
         InlongGroupInfo updateGroupInfo = groupService.get(inlongGroupId);
         groupService.updateStatus(inlongGroupId, GroupStatus.TO_BE_APPROVAL.getCode(), GLOBAL_OPERATOR);
@@ -116,7 +115,7 @@ public class ServiceBaseTest extends BaseTest {
         request.setInlongGroupId(inlongGroupId);
         request.setInlongStreamId(inlongStreamId);
         request.setMqResource(inlongStreamId);
-        request.setDataSeparator("124");
+        request.setDataSeparator(String.valueOf((int) '|'));
         request.setDataEncoding("UTF-8");
         request.setFieldList(createStreamFields(inlongGroupId, inlongStreamId));
         streamService.save(request, GLOBAL_OPERATOR);

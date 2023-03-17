@@ -13,7 +13,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.apache.inlong.sdk.sort.api;
@@ -39,6 +38,12 @@ public interface TopicFetcher {
      * @throws Exception
      */
     void ack(String msgOffset) throws Exception;
+
+    /**
+     * Get the unique fetcher key to specify the fetcher who consume this message.
+     * @return Message key.
+     */
+    String getFetchKey();
 
     /**
      * Pause the consuming

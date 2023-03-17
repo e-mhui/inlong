@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-version: '3.5'
+version: '2.4'
 
 services:
   mysql:
     image: mysql:8.0.28
     container_name: mysql
+    platform: "linux/x86_64"
     ports:
       - "3306:3306"
     environment:
@@ -38,12 +39,13 @@ services:
     container_name: pulsar
     ports:
       - "6650:6650"
+      - "8080:8080"
     volumes:
       - ./pulsar/data:/pulsar/data
     command: bin/pulsar standalone
 
   manager:
-    image: inlong/manager
+    image: inlong/manager:${VERSION_TAG}
     container_name: manager
     depends_on:
       mysql:
@@ -55,12 +57,12 @@ services:
       - USERNAME=root
       - PASSWORD=inlong
       - ZK_URL=tubemq-server:2181
-      - FLINK_HOST=localhost
+      - FLINK_HOST=jobmanager
       - FLINK_PORT=8081
       - AUDIT_PROXY_URL=audit:10081
 
   webisite:
-    image: inlong/dashboard
+    image: inlong/dashboard:${VERSION_TAG}
     container_name: dashboard
     depends_on:
       - manager
@@ -70,20 +72,23 @@ services:
       - MANAGER_API_ADDRESS=manager:8083
 
   dataproxy:
-    image: inlong/dataproxy:latest
+    image: inlong/dataproxy:${VERSION_TAG}
     container_name: dataproxy
     depends_on:
       - manager
     ports:
       - "46801:46801"
+      - "46802:46802"
     environment:
       - MANAGER_OPENAPI_IP=manager
       - MANAGER_OPENAPI_PORT=8083
       - AUDIT_PROXY_URL=audit:10081
+      # pulsar or kafka
       - MQ_TYPE=pulsar
+      - ETH_NAME=eth0
 
   agent:
-    image: inlong/agent:latest
+    image: inlong/agent:${VERSION_TAG}
     container_name: agent
     depends_on:
       - manager
@@ -100,8 +105,9 @@ services:
       - ./collect-data:/data/collect-data
 
   audit:
-    image: inlong/audit:latest
+    image: inlong/audit:${VERSION_TAG}
     container_name: audit
+    privileged: true
     depends_on:
       mysql:
         condition: service_healthy
@@ -109,7 +115,33 @@ services:
       - JDBC_URL=mysql:3306
       - USERNAME=root
       - PASSWORD=inlong
-      - PULSAR_BROKER_LIST=pulsar:6650
+      # pulsar or kafka
       - MQ_TYPE=pulsar
+      - PULSAR_BROKER_LIST=pulsar:6650
+      # for kafka
+      # - KAFKA_SERVER_LIST=kafka:9092
     ports:
       - "10081:10081"
+
+  # flink jobmanager
+  jobmanager:
+    image: apache/flink:1.13-scala_2.11
+    container_name: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+
+  # flink taskmanager
+  taskmanager:
+    image: apache/flink:1.13-scala_2.11
+    container_name: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+    command: taskmanager

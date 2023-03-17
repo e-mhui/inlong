@@ -59,6 +59,8 @@ static const int32_t kRpcTimoutMinMs = 8000;
 static const int32_t kHeartBeatPeriodDefMs = 10000;
 static const int32_t kHeartBeatFailRetryTimesDef = 5;
 static const int32_t kHeartBeatSleepPeriodDefMs = 60000;
+// default max master hb retry count
+static const int32_t kMaxMasterHBRetryCount = 8;
 // max masterAddrInfo length
 static const int32_t kMasterAddrInfoMaxLength = 1024;
 
@@ -101,6 +103,8 @@ static const uint32_t kBrokerTlsPortDef = 8124;
 // invalid value
 static const int32_t kInvalidValue = -2;
 
+static const uint32_t kMetaStoreInsBase = 10000;
+
 // message flag's properties settings
 static const int32_t kMsgFlagIncProperties = 0x01;
 
@@ -108,6 +112,19 @@ static const int32_t kMsgFlagIncProperties = 0x01;
 static const char kRsvPropKeyFilterItem[] = "$msgType$";
 // reserved property key message send time
 static const char kRsvPropKeyMsgTime[] = "$msgTime$";
+
+// enum RegisterMasterStatus
+enum RegisterMasterStatus {
+  kMasterUnRegistered = 0,
+  kMasterRegistering = 1,
+  kMasterRegistered = 2
+};
+
+// enum MasterHBStatus
+enum MasterHBStatus {
+  kMasterHBWaiting = 0,
+  kMasterHBRunning = 1
+};
 
 }  // namespace tb_config
 

@@ -17,6 +17,7 @@
 
 package org.apache.inlong.agent.core.task;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.inlong.agent.common.AbstractDaemon;
 import org.apache.inlong.agent.common.AgentThreadFactory;
 import org.apache.inlong.agent.conf.AgentConfiguration;
@@ -116,9 +117,8 @@ public class TaskManager extends AbstractDaemon {
      * @param task task
      */
     public void submitTask(Task task) {
-        TaskWrapper taskWrapper = new TaskWrapper(agentManager, task);
+        TaskWrapper taskWrapper = new TaskWrapper(this, task);
         submitTask(taskWrapper);
-
     }
 
     public void submitTask(TaskWrapper wrapper) {
@@ -128,6 +128,10 @@ public class TaskManager extends AbstractDaemon {
             boolean notSubmitted = true;
             while (notSubmitted) {
                 try {
+                    if (this.runningPool.isShutdown()) {
+                        LOGGER.error("submit task error because thread pool is closed");
+                        break;
+                    }
                     this.runningPool.submit(wrapper);
                     notSubmitted = false;
                 } catch (Exception ex) {
@@ -197,6 +201,9 @@ public class TaskManager extends AbstractDaemon {
      * @param taskId task id
      */
     public void removeTask(String taskId) {
+        if (taskId == null) {
+            return;
+        }
         getTaskMetrics().taskRunningCount.decrementAndGet();
         TaskWrapper taskWrapper = tasks.remove(taskId);
         if (taskWrapper != null) {
@@ -217,6 +224,11 @@ public class TaskManager extends AbstractDaemon {
             return true;
         }
         return false;
+    }
+
+    @VisibleForTesting
+    public int getTaskSize() {
+        return tasks.size();
     }
 
     /**

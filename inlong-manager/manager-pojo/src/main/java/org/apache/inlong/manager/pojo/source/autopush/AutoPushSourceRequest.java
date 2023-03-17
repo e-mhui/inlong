@@ -26,6 +26,8 @@ import org.apache.inlong.manager.common.consts.SourceType;
 import org.apache.inlong.manager.common.util.JsonTypeDefine;
 import org.apache.inlong.manager.pojo.source.SourceRequest;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * AutoPush(DataProxy SDK) source request
  */
@@ -38,6 +40,15 @@ public class AutoPushSourceRequest extends SourceRequest {
 
     @ApiModelProperty(value = "DataProxy group name, used when the user enables local configuration")
     private String dataProxyGroup;
+
+    @ApiModelProperty(value = "Data encoding format: UTF-8, GBK")
+    private String dataEncoding = StandardCharsets.UTF_8.toString();
+
+    @ApiModelProperty(value = "Data separator")
+    private String dataSeparator = String.valueOf((int) '|');
+
+    @ApiModelProperty(value = "Data field escape symbol")
+    private String dataEscapeChar;
 
     public AutoPushSourceRequest() {
         this.setSourceType(SourceType.AUTO_PUSH);

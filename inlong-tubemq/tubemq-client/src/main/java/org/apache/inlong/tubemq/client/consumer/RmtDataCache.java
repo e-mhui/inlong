@@ -1,10 +1,10 @@
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -57,6 +57,7 @@ import org.slf4j.LoggerFactory;
  * Remote data cache.
  */
 public class RmtDataCache implements Closeable {
+
     private static final Logger logger = LoggerFactory.getLogger(RmtDataCache.class);
     private static final AtomicLong refCont = new AtomicLong(0);
     private static Timer timer;
@@ -73,14 +74,14 @@ public class RmtDataCache implements Closeable {
     private long lastEmptyBrokerPrintTime = 0;
     private long lastEmptyTopicPrintTime = 0;
     private long lastBrokerUpdatedTime = System.currentTimeMillis();
-    private AtomicLong lstBrokerConfigId =
+    private final AtomicLong lstBrokerConfigId =
             new AtomicLong(TBaseConstants.META_VALUE_UNDEFINED);
     private Map<Integer, BrokerInfo> brokersMap =
             new ConcurrentHashMap<>();
     // require Auth info
     private final AtomicBoolean nextWithAuthInfo2M = new AtomicBoolean(false);
-    private final ConcurrentHashMap<Integer, AtomicBoolean> nextWithAuthInfo2BMap
-            = new ConcurrentHashMap<Integer, AtomicBoolean>();
+    private final ConcurrentHashMap<Integer, AtomicBoolean> nextWithAuthInfo2BMap =
+            new ConcurrentHashMap<Integer, AtomicBoolean>();
     // consume control info
     private final AtomicLong reqMaxOffsetCsmId =
             new AtomicLong(TBaseConstants.META_VALUE_UNDEFINED);
@@ -96,12 +97,15 @@ public class RmtDataCache implements Closeable {
             new AtomicLong(TBaseConstants.META_VALUE_UNDEFINED);
     private boolean isFirstReport = true;
     private long reportIntCount = 0;
+    private final long maxReportTimes;
     // partition cache
     private final AtomicInteger waitCont = new AtomicInteger(0);
     private final ConcurrentHashMap<String, Timeout> timeouts =
             new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<String> indexPartition =
             new ConcurrentLinkedQueue<String>();
+    private volatile long lstReportTime = 0;
+    private final AtomicLong partMapChgTime = new AtomicLong(0);
     private final ConcurrentHashMap<String /* index */, PartitionExt> partitionMap =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String /* index */, Long> partitionUsedMap =
@@ -116,7 +120,7 @@ public class RmtDataCache implements Closeable {
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String/* partitionKey */, Integer> partRegisterBookMap =
             new ConcurrentHashMap<>();
-    private AtomicBoolean isClosed = new AtomicBoolean(false);
+    private final AtomicBoolean isClosed = new AtomicBoolean(false);
     private CountDownLatch dataProcessSync = new CountDownLatch(0);
 
     /**
@@ -130,6 +134,7 @@ public class RmtDataCache implements Closeable {
         if (refCont.incrementAndGet() == 1) {
             timer = new HashedWheelTimer();
         }
+        this.maxReportTimes = consumerConfig.getMaxSubInfoReportIntvlTimes() * 10L;
         Map<Partition, ConsumeOffsetInfo> tmpPartOffsetMap = new HashMap<>();
         if (partitionList != null) {
             for (Partition partition : partitionList) {
@@ -143,7 +148,7 @@ public class RmtDataCache implements Closeable {
     }
 
     public void bookBrokerRequireAuthInfo(int brokerId,
-                                          ClientBroker.HeartBeatResponseB2C heartBeatResponseV2) {
+            ClientBroker.HeartBeatResponseB2C heartBeatResponseV2) {
         if (!heartBeatResponseV2.hasRequireAuth()) {
             return;
         }
@@ -163,40 +168,38 @@ public class RmtDataCache implements Closeable {
      * update ops task in cache
      *
      * @param opsTaskInfo ops task info
+     * @param strBuff   the string buffer
      *
      */
-    public void updOpsTaskInfo(ClientMaster.OpsTaskInfo opsTaskInfo) {
+    public void updOpsTaskInfo(ClientMaster.OpsTaskInfo opsTaskInfo, StringBuilder strBuff) {
         if (opsTaskInfo == null) {
             return;
         }
-        // update flowctrl info
-        if (opsTaskInfo.hasGroupFlowCheckId()) {
-            if (opsTaskInfo.getGroupFlowCheckId() >= 0
-                    && opsTaskInfo.getGroupFlowCheckId() != groupFlowCtrlRuleHandler.getFlowCtrlId()) {
-                try {
-                    groupFlowCtrlRuleHandler.updateFlowCtrlInfo(TBaseConstants.META_VALUE_UNDEFINED,
-                            opsTaskInfo.getGroupFlowCheckId(), opsTaskInfo.getGroupFlowControlInfo());
-                } catch (Exception e1) {
-                    logger.warn("[Remote Data Cache] found parse group flowCtrl rules failure", e1);
-                }
+        // update group flowctrl info
+        if (opsTaskInfo.hasGroupFlowCheckId()
+                && opsTaskInfo.getGroupFlowCheckId() >= 0
+                && opsTaskInfo.getGroupFlowCheckId() != groupFlowCtrlRuleHandler.getFlowCtrlId()) {
+            try {
+                groupFlowCtrlRuleHandler.updateFlowCtrlInfo(
+                        opsTaskInfo.getQryPriorityId(),
+                        opsTaskInfo.getGroupFlowCheckId(),
+                        opsTaskInfo.getGroupFlowControlInfo(), strBuff);
+            } catch (Exception e1) {
+                logger.warn("[Remote Data Cache] found parse group flowCtrl rules failure", e1);
             }
         }
-        if (opsTaskInfo.hasDefFlowCheckId()) {
-            if (opsTaskInfo.getDefFlowCheckId() >= 0
-                    && opsTaskInfo.getDefFlowCheckId() != defFlowCtrlRuleHandler.getFlowCtrlId()) {
-                try {
-                    defFlowCtrlRuleHandler.updateFlowCtrlInfo(TBaseConstants.META_VALUE_UNDEFINED,
-                            opsTaskInfo.getDefFlowCheckId(), opsTaskInfo.getDefFlowControlInfo());
-                } catch (Exception e1) {
-                    logger.warn("[Remote Data Cache] found parse default flowCtrl rules failure", e1);
-                }
+        // update default flowctrl info
+        if (opsTaskInfo.hasDefFlowCheckId()
+                && opsTaskInfo.getDefFlowCheckId() >= 0
+                && opsTaskInfo.getDefFlowCheckId() != defFlowCtrlRuleHandler.getFlowCtrlId()) {
+            try {
+                defFlowCtrlRuleHandler.updateFlowCtrlInfo(
+                        TBaseConstants.META_VALUE_UNDEFINED,
+                        opsTaskInfo.getDefFlowCheckId(),
+                        opsTaskInfo.getDefFlowControlInfo(), strBuff);
+            } catch (Exception e1) {
+                logger.warn("[Remote Data Cache] found parse default flowCtrl rules failure", e1);
             }
-        }
-        // update priority id
-        int qryPriorityId = opsTaskInfo.hasQryPriorityId()
-                ? opsTaskInfo.getQryPriorityId() : groupFlowCtrlRuleHandler.getQryPriorityId();
-        if (qryPriorityId != groupFlowCtrlRuleHandler.getQryPriorityId()) {
-            groupFlowCtrlRuleHandler.setQryPriorityId(qryPriorityId);
         }
         // update consume control info
         if (opsTaskInfo.hasCsmFrmMaxOffsetCtrlId()
@@ -217,82 +220,80 @@ public class RmtDataCache implements Closeable {
     /**
      * update ops task in cache
      *
-     * @param response master register response
+     * @param response   master register response
+     * @param strBuff  the string buffer
      *
      */
-    public void updFlowCtrlInfoInfo(ClientMaster.RegisterResponseM2C response) {
+    public void updFlowCtrlInfoInfo(ClientMaster.RegisterResponseM2C response,
+            StringBuilder strBuff) {
         if (response == null) {
             return;
         }
-        // update flowctrl info
-        if (response.hasGroupFlowCheckId()) {
-            if (response.getGroupFlowCheckId() >= 0
-                    && response.getGroupFlowCheckId() != groupFlowCtrlRuleHandler.getFlowCtrlId()) {
-                try {
-                    groupFlowCtrlRuleHandler.updateFlowCtrlInfo(TBaseConstants.META_VALUE_UNDEFINED,
-                            response.getGroupFlowCheckId(), response.getGroupFlowControlInfo());
-                } catch (Exception e1) {
-                    logger.warn("[Remote Data Cache] found parse group flowCtrl rules failure", e1);
-                }
+        // update group flowctrl info
+        if (response.hasGroupFlowCheckId()
+                && response.getGroupFlowCheckId() >= 0
+                && response.getGroupFlowCheckId() != groupFlowCtrlRuleHandler.getFlowCtrlId()) {
+            try {
+                groupFlowCtrlRuleHandler.updateFlowCtrlInfo(
+                        response.getQryPriorityId(),
+                        response.getGroupFlowCheckId(),
+                        response.getGroupFlowControlInfo(), strBuff);
+            } catch (Exception e1) {
+                logger.warn("[Remote Data Cache] found parse group flowCtrl rules failure", e1);
             }
         }
-        if (response.hasDefFlowCheckId()) {
-            if (response.getDefFlowCheckId() >= 0
-                    && response.getDefFlowCheckId() != defFlowCtrlRuleHandler.getFlowCtrlId()) {
-                try {
-                    defFlowCtrlRuleHandler.updateFlowCtrlInfo(TBaseConstants.META_VALUE_UNDEFINED,
-                            response.getDefFlowCheckId(), response.getDefFlowControlInfo());
-                } catch (Exception e1) {
-                    logger.warn("[Remote Data Cache] found parse default flowCtrl rules failure", e1);
-                }
+        // update default flowctrl info
+        if (response.hasDefFlowCheckId()
+                && response.getDefFlowCheckId() >= 0
+                && response.getDefFlowCheckId() != defFlowCtrlRuleHandler.getFlowCtrlId()) {
+            try {
+                defFlowCtrlRuleHandler.updateFlowCtrlInfo(
+                        TBaseConstants.META_VALUE_UNDEFINED,
+                        response.getDefFlowCheckId(),
+                        response.getDefFlowControlInfo(), strBuff);
+            } catch (Exception e1) {
+                logger.warn("[Remote Data Cache] found parse default flowCtrl rules failure", e1);
             }
-        }
-        // update priority id
-        int qryPriorityId = response.hasQryPriorityId()
-                ? response.getQryPriorityId() : groupFlowCtrlRuleHandler.getQryPriorityId();
-        if (qryPriorityId != groupFlowCtrlRuleHandler.getQryPriorityId()) {
-            groupFlowCtrlRuleHandler.setQryPriorityId(qryPriorityId);
         }
     }
 
     /**
      * update ops task in cache
      *
-     * @param response master register response
+     * @param response   master register response
+     * @param strBuff  the string buffer
      *
      */
-    public void updFlowCtrlInfoInfo(ClientMaster.HeartResponseM2C response) {
+    public void updFlowCtrlInfoInfo(ClientMaster.HeartResponseM2C response,
+            StringBuilder strBuff) {
         if (response == null) {
             return;
         }
-        // update flowctrl info
-        if (response.hasGroupFlowCheckId()) {
-            if (response.getGroupFlowCheckId() >= 0
-                    && response.getGroupFlowCheckId() != groupFlowCtrlRuleHandler.getFlowCtrlId()) {
-                try {
-                    groupFlowCtrlRuleHandler.updateFlowCtrlInfo(TBaseConstants.META_VALUE_UNDEFINED,
-                            response.getGroupFlowCheckId(), response.getGroupFlowControlInfo());
-                } catch (Exception e1) {
-                    logger.warn("[Remote Data Cache] found parse group flowCtrl rules failure", e1);
-                }
+        // update group flowctrl info
+        if (response.hasGroupFlowCheckId()
+                && response.getGroupFlowCheckId() >= 0
+                && response.getGroupFlowCheckId() != groupFlowCtrlRuleHandler.getFlowCtrlId()) {
+            try {
+                groupFlowCtrlRuleHandler.updateFlowCtrlInfo(
+                        response.getQryPriorityId(),
+                        response.getGroupFlowCheckId(),
+                        response.getGroupFlowControlInfo(), strBuff);
+            } catch (Exception e1) {
+                logger.warn("[Remote Data Cache] found parse group flowCtrl rules failure", e1);
             }
         }
-        if (response.hasDefFlowCheckId()) {
-            if (response.getDefFlowCheckId() >= 0
-                    && response.getDefFlowCheckId() != defFlowCtrlRuleHandler.getFlowCtrlId()) {
-                try {
-                    defFlowCtrlRuleHandler.updateFlowCtrlInfo(TBaseConstants.META_VALUE_UNDEFINED,
-                            response.getDefFlowCheckId(), response.getDefFlowControlInfo());
-                } catch (Exception e1) {
-                    logger.warn("[Remote Data Cache] found parse default flowCtrl rules failure", e1);
-                }
+        // update default flowctrl info
+        if (response.hasDefFlowCheckId()
+                && response.getDefFlowCheckId() >= 0
+                && response.getDefFlowCheckId() != defFlowCtrlRuleHandler.getFlowCtrlId()) {
+            try {
+                defFlowCtrlRuleHandler.updateFlowCtrlInfo(
+                        TBaseConstants.META_VALUE_UNDEFINED,
+                        response.getDefFlowCheckId(),
+                        response.getDefFlowControlInfo(), strBuff);
+            } catch (Exception e1) {
+                logger.warn("[Remote Data Cache] found parse default flowCtrl rules failure", e1);
             }
-        }
-        // update priority id
-        int qryPriorityId = response.hasQryPriorityId()
-                ? response.getQryPriorityId() : groupFlowCtrlRuleHandler.getQryPriorityId();
-        if (qryPriorityId != groupFlowCtrlRuleHandler.getQryPriorityId()) {
-            groupFlowCtrlRuleHandler.setQryPriorityId(qryPriorityId);
         }
     }
 
@@ -369,8 +370,7 @@ public class RmtDataCache implements Closeable {
 
     public Map<String, Boolean> getConfPartMetaInfo() {
         Map<String, Boolean> configMap = new HashMap<>();
-        for (Map.Entry<String, Tuple2<Partition, Integer>> entry
-                : configuredPartInfoMap.entrySet()) {
+        for (Map.Entry<String, Tuple2<Partition, Integer>> entry : configuredPartInfoMap.entrySet()) {
             if (entry == null || entry.getKey() == null || entry.getValue() == null) {
                 continue;
             }
@@ -399,8 +399,8 @@ public class RmtDataCache implements Closeable {
      * @return               whether query success
      */
     public boolean getSubscribablePartition(String partitionKey,
-                                            ProcessResult result,
-                                            StringBuilder sBuffer) {
+            ProcessResult result,
+            StringBuilder sBuffer) {
         Tuple2<Partition, Integer> partStatusInfo =
                 configuredPartInfoMap.get(partitionKey);
         if (partStatusInfo == null) {
@@ -439,12 +439,12 @@ public class RmtDataCache implements Closeable {
      * @param sBuilder        string process buffer
      */
     public void updateBrokerInfoList(long pkgCheckSum,
-                                     List<String> pkgBrokerInfos,
-                                     StringBuilder sBuilder) {
+            List<String> pkgBrokerInfos,
+            StringBuilder sBuilder) {
         if (pkgCheckSum != lstBrokerConfigId.get()) {
             if (pkgBrokerInfos != null) {
-                brokersMap =
-                        DataConverterUtil.convertBrokerInfo(pkgBrokerInfos);
+                brokersMap = DataConverterUtil.convertBrokerInfo(
+                        pkgBrokerInfos, consumerConfig.isTlsEnable());
                 lstBrokerConfigId.set(pkgCheckSum);
                 lastBrokerUpdatedTime = System.currentTimeMillis();
                 if (pkgBrokerInfos.isEmpty()) {
@@ -566,12 +566,16 @@ public class RmtDataCache implements Closeable {
             if (!this.partitionMap.isEmpty()) {
                 isFirstReport = false;
                 builder.setReportSubInfo(true);
+                lstReportTime = partMapChgTime.get();
                 builder.addAllPartSubInfo(getSubscribedPartitionInfo());
             }
-        } else if ((++this.reportIntCount)
-                % consumerConfig.getMaxSubInfoReportIntvlTimes() == 0) {
-            builder.setReportSubInfo(true);
-            builder.addAllPartSubInfo(getSubscribedPartitionInfo());
+        } else {
+            if (lstReportTime != partMapChgTime.get()
+                    || ((++this.reportIntCount) % this.maxReportTimes == 0)) {
+                builder.setReportSubInfo(true);
+                lstReportTime = partMapChgTime.get();
+                builder.addAllPartSubInfo(getSubscribedPartitionInfo());
+            }
         }
         return builder.build();
     }
@@ -615,10 +619,10 @@ public class RmtDataCache implements Closeable {
      * @param maxOffset     partition current max offset
      */
     public void setPartitionContextInfo(String partitionKey, long currOffset,
-                                        int reqProcType, int errCode,
-                                        boolean isEscLimit, int msgSize,
-                                        long limitDlt, long curDataDlt,
-                                        boolean isRequireSlow, long maxOffset) {
+            int reqProcType, int errCode,
+            boolean isEscLimit, int msgSize,
+            long limitDlt, long curDataDlt,
+            boolean isRequireSlow, long maxOffset) {
         PartitionExt partitionExt = partitionMap.get(partitionKey);
         if (partitionExt != null) {
             updateOffsetCache(partitionKey, currOffset, maxOffset);
@@ -784,7 +788,7 @@ public class RmtDataCache implements Closeable {
                     break;
                 }
                 ThreadUtils.sleep(300);
-                //if no idle partitions to get, wait and cycle 500 times
+                // if no idle partitions to get, wait and cycle 500 times
             } while (cycleCnt++ < 500);
             if (key == null) {
                 return null;
@@ -874,9 +878,9 @@ public class RmtDataCache implements Closeable {
     }
 
     protected void succRspRelease(String partitionKey, String topicName,
-                                  long usedToken, boolean isLastPackConsumed,
-                                  boolean isFilterConsume, long currOffset,
-                                  long maxOffset) {
+            long usedToken, boolean isLastPackConsumed,
+            boolean isFilterConsume, long currOffset,
+            long maxOffset) {
         PartitionExt partitionExt = this.partitionMap.get(partitionKey);
         if (partitionExt != null) {
             if (!indexPartition.contains(partitionKey) && !isTimeWait(partitionKey)) {
@@ -913,10 +917,10 @@ public class RmtDataCache implements Closeable {
      * @param maxOffset     current max offset of the partition
      */
     public void errRspRelease(String partitionKey, String topicName,
-                              long usedToken, boolean isLastPackConsumed,
-                              long currOffset, int reqProcType, int errCode,
-                              boolean isEscLimit, int msgSize, long limitDlt,
-                              boolean isFilterConsume, long curDataDlt, long maxOffset) {
+            long usedToken, boolean isLastPackConsumed,
+            long currOffset, int reqProcType, int errCode,
+            boolean isEscLimit, int msgSize, long limitDlt,
+            boolean isFilterConsume, long curDataDlt, long maxOffset) {
         PartitionExt partitionExt = this.partitionMap.get(partitionKey);
         if (partitionExt != null) {
             if (!indexPartition.contains(partitionKey) && !isTimeWait(partitionKey)) {
@@ -1068,7 +1072,7 @@ public class RmtDataCache implements Closeable {
             for (Map.Entry<BrokerInfo, List<Partition>> entry : unRegisterInfoMap.entrySet()) {
                 for (Partition partition : entry.getValue()) {
                     PartitionExt partitionExt =
-                            partitionMap.remove(partition.getPartitionKey());
+                            rmvPartitionFromMap(partition.getPartitionKey());
                     if (partitionExt != null) {
                         lastPackConsumed = partitionExt.isLastPackConsumed();
                         if (!cancelTimeTask(partition.getPartitionKey())
@@ -1128,8 +1132,8 @@ public class RmtDataCache implements Closeable {
      * @return removed or not
      */
     public boolean removeAndGetPartition(String partitionKey, long inUseWaitPeriodMs,
-                                         boolean isWaitTimeoutRollBack, ProcessResult result,
-                                         StringBuilder sBuffer) {
+            boolean isWaitTimeoutRollBack, ProcessResult result,
+            StringBuilder sBuffer) {
         boolean lastPackConsumed = false;
         List<String> partitionKeys = new ArrayList<>();
         partitionKeys.add(partitionKey);
@@ -1137,7 +1141,7 @@ public class RmtDataCache implements Closeable {
         try {
             waitPartitions(partitionKeys, inUseWaitPeriodMs);
             PartitionExt partitionExt =
-                    partitionMap.remove(partitionKey);
+                    rmvPartitionFromMap(partitionKey);
             if (partitionExt == null) {
                 result.setSuccResult(null);
                 return result.isSuccess();
@@ -1187,7 +1191,7 @@ public class RmtDataCache implements Closeable {
      * @param partition partition to be removed
      */
     public void removePartition(Partition partition) {
-        partitionMap.remove(partition.getPartitionKey());
+        rmvPartitionFromMap(partition.getPartitionKey());
         cancelTimeTask(partition.getPartitionKey());
         indexPartition.remove(partition.getPartitionKey());
         partitionUsedMap.remove(partition.getPartitionKey());
@@ -1235,8 +1239,8 @@ public class RmtDataCache implements Closeable {
             }
             ConsumeOffsetInfo offsetInfo = partitionOffsetMap.get(entry.getKey());
             tmpPartitionMap.put(entry.getKey(),
-                new ConsumeOffsetInfo(entry.getKey(), offsetInfo.getCurrOffset(),
-                        offsetInfo.getMaxOffset(), offsetInfo.getUpdateTime()));
+                    new ConsumeOffsetInfo(entry.getKey(), offsetInfo.getCurrOffset(),
+                            offsetInfo.getMaxOffset(), offsetInfo.getUpdateTime()));
         }
         return tmpPartitionMap;
     }
@@ -1295,7 +1299,7 @@ public class RmtDataCache implements Closeable {
      * @param unRegPartitionList  the unregistered partition list
      */
     public void filterCachedPartitionInfo(Map<BrokerInfo, List<Partition>> registerInfoMap,
-                                          List<Partition> unRegPartitionList) {
+            List<Partition> unRegPartitionList) {
         List<BrokerInfo> brokerInfoList = new ArrayList<>();
         for (Map.Entry<BrokerInfo, List<Partition>> entry : registerInfoMap.entrySet()) {
             if (entry.getKey() == null || entry.getValue() == null) {
@@ -1454,9 +1458,9 @@ public class RmtDataCache implements Closeable {
             ConsumeOffsetInfo currOffsetInfo = partitionOffsetMap.get(partitionKey);
             if (currOffsetInfo == null) {
                 currOffsetInfo =
-                    new ConsumeOffsetInfo(partitionKey, currOffset, maxOffset);
+                        new ConsumeOffsetInfo(partitionKey, currOffset, maxOffset);
                 ConsumeOffsetInfo tmpOffsetInfo =
-                    partitionOffsetMap.putIfAbsent(partitionKey, currOffsetInfo);
+                        partitionOffsetMap.putIfAbsent(partitionKey, currOffsetInfo);
                 if (tmpOffsetInfo != null) {
                     currOffsetInfo = tmpOffsetInfo;
                 }
@@ -1505,7 +1509,7 @@ public class RmtDataCache implements Closeable {
             }
             updateOffsetCache(partition.getPartitionKey(),
                     entry.getValue().getCurrOffset(), entry.getValue().getMaxOffset());
-            partitionMap.put(partition.getPartitionKey(),
+            addPartitionToMap(partition.getPartitionKey(),
                     new PartitionExt(this.groupFlowCtrlRuleHandler,
                             this.defFlowCtrlRuleHandler, partition.getBroker(),
                             partition.getTopic(), partition.getPartitionId()));
@@ -1528,6 +1532,19 @@ public class RmtDataCache implements Closeable {
     public boolean isRebProcessing() {
         return (this.dataProcessSync != null
                 && this.dataProcessSync.getCount() != 0);
+    }
+
+    private void addPartitionToMap(String partKey, PartitionExt partitionExt) {
+        partitionMap.put(partKey, partitionExt);
+        partMapChgTime.set(System.currentTimeMillis());
+    }
+
+    private PartitionExt rmvPartitionFromMap(String partKey) {
+        PartitionExt tmpPartExt = partitionMap.remove(partKey);
+        if (tmpPartExt != null) {
+            partMapChgTime.set(System.currentTimeMillis());
+        }
+        return tmpPartExt;
     }
 
     private void pauseProcess() {
@@ -1578,4 +1595,3 @@ public class RmtDataCache implements Closeable {
         }
     }
 }
-

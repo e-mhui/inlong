@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -25,7 +25,7 @@ public class TClientConstants {
     public static final long CFG_DEFAULT_REGFAIL_WAIT_PERIOD_MS = 1000;
     public static final long CFG_DEFAULT_MSG_NOTFOUND_WAIT_PERIOD_MS = 400L;
     public static final long CFG_DEFAULT_CONSUME_READ_WAIT_PERIOD_MS = 90000L;
-    public static final long CFG_DEFAULT_CONSUME_READ_CHECK_SLICE_MS = 3L;
+    public static final long CFG_DEFAULT_CONSUME_READ_CHECK_SLICE_MS = 5L;
     public static final long CFG_DEFAULT_PUSH_LISTENER_WAIT_PERIOD_MS = 3000L;
     public static final long CFG_DEFAULT_PULL_REB_CONFIRM_WAIT_PERIOD_MS = 3000L;
     public static final long CFG_DEFAULT_PULL_PROTECT_CONFIRM_WAIT_PERIOD_MS = 60000L;

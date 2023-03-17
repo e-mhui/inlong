@@ -1,27 +1,28 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.inlong.sort.iceberg.sink;
 
+import java.util.Set;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
@@ -34,46 +35,71 @@ import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.types.Row;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DistributionMode;
-import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SerializableTable;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.actions.ActionsProvider;
+import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.flink.CatalogLoader;
 import org.apache.iceberg.flink.FlinkSchemaUtil;
+import org.apache.iceberg.flink.FlinkWriteConf;
+import org.apache.iceberg.flink.FlinkWriteOptions;
 import org.apache.iceberg.flink.TableLoader;
-import org.apache.iceberg.flink.sink.RowDataTaskWriterFactory;
 import org.apache.iceberg.flink.sink.TaskWriterFactory;
 import org.apache.iceberg.flink.util.FlinkCompatibilityUtil;
 import org.apache.iceberg.io.WriteResult;
+import org.apache.iceberg.relocated.com.google.common.annotations.VisibleForTesting;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
+import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.util.PropertyUtil;
+import org.apache.inlong.sort.base.dirty.DirtyOptions;
+import org.apache.inlong.sort.base.dirty.sink.DirtySink;
+import org.apache.inlong.sort.base.sink.MultipleSinkOption;
+import org.apache.inlong.sort.iceberg.sink.multiple.IcebergMultipleFilesCommiter;
+import org.apache.inlong.sort.iceberg.sink.multiple.IcebergMultipleStreamWriter;
+import org.apache.inlong.sort.iceberg.sink.multiple.IcebergProcessOperator;
+import org.apache.inlong.sort.iceberg.sink.multiple.IcebergSingleFileCommiter;
+import org.apache.inlong.sort.iceberg.sink.multiple.IcebergSingleStreamWriter;
+import org.apache.inlong.sort.iceberg.sink.multiple.MultipleWriteResult;
+import org.apache.inlong.sort.iceberg.sink.multiple.RecordWithSchema;
+import org.apache.inlong.sort.iceberg.sink.multiple.DynamicSchemaHandleOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPSERT_ENABLED;
 import static org.apache.iceberg.TableProperties.UPSERT_ENABLED_DEFAULT;
 import static org.apache.iceberg.TableProperties.WRITE_DISTRIBUTION_MODE;
-import static org.apache.iceberg.TableProperties.WRITE_DISTRIBUTION_MODE_NONE;
-import static org.apache.iceberg.TableProperties.WRITE_TARGET_FILE_SIZE_BYTES;
-import static org.apache.iceberg.TableProperties.WRITE_TARGET_FILE_SIZE_BYTES_DEFAULT;
 
+/**
+ * Copy from iceberg-flink:iceberg-flink-1.13:0.13.2
+ * Add an option `sink.ignore.changelog` to support insert-only mode without primaryKey.
+ * Add a table property `write.compact.enable` to support small file compact.
+ * Add option `inlong.metric` and `metrics.audit.proxy.hosts` to support collect inlong metrics and audit.
+ */
 public class FlinkSink {
+
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSink.class);
 
-    private static final String ICEBERG_STREAM_WRITER_NAME = IcebergStreamWriter.class.getSimpleName();
-    private static final String ICEBERG_FILES_COMMITTER_NAME = IcebergFilesCommitter.class.getSimpleName();
+    private static final String ICEBERG_STREAM_WRITER_NAME = IcebergSingleStreamWriter.class.getSimpleName();
+    private static final String ICEBERG_FILES_COMMITTER_NAME = IcebergSingleFileCommiter.class.getSimpleName();
+    private static final String ICEBERG_MULTIPLE_STREAM_WRITER_NAME =
+            IcebergMultipleStreamWriter.class.getSimpleName();
+    private static final String ICEBERG_MULTIPLE_FILES_COMMITTER_NAME =
+            IcebergMultipleFilesCommiter.class.getSimpleName();
+    private static final String ICEBERG_WHOLE_DATABASE_MIGRATION_NAME =
+            DynamicSchemaHandleOperator.class.getSimpleName();
 
     private FlinkSink() {
     }
@@ -124,18 +150,27 @@ public class FlinkSink {
     }
 
     public static class Builder {
+
         private Function<String, DataStream<RowData>> inputCreator = null;
         private TableLoader tableLoader;
         private Table table;
         private TableSchema tableSchema;
+        private ActionsProvider actionProvider;
         private boolean overwrite = false;
-        private DistributionMode distributionMode = null;
+        private boolean appendMode = false;
         private Integer writeParallelism = null;
-        private boolean upsert = false;
         private List<String> equalityFieldColumns = null;
         private String uidPrefix = null;
-        private String inLongMetric = null;
+        private ReadableConfig readableConfig = new Configuration();
+        private final Map<String, String> writeOptions = Maps.newHashMap();
+        private FlinkWriteConf flinkWriteConf = null;
+        private String inlongMetric = null;
         private String auditHostAndPorts = null;
+        private CatalogLoader catalogLoader = null;
+        private boolean multipleSink = false;
+        private MultipleSinkOption multipleSinkOption = null;
+        private DirtyOptions dirtyOptions;
+        private @Nullable DirtySink<Object> dirtySink;
 
         private Builder() {
         }
@@ -161,9 +196,9 @@ public class FlinkSink {
         }
 
         /**
-         * This iceberg {@link Table} instance is used for initializing {@link IcebergStreamWriter} which will write all
-         * the records into {@link DataFile}s and emit them to downstream operator. Providing a table would avoid so
-         * many table loading from each separate task.
+         * This iceberg {@link Table} instance is used for initializing {@link IcebergSingleStreamWriter} which will
+         * write all the records into {@link DataFile}s and emit them to downstream operator. Providing a table would \
+         * avoid so many table loading from each separate task.
          *
          * @param newTable the loaded iceberg table instance.
          * @return {@link Builder} to connect the iceberg table.
@@ -174,7 +209,7 @@ public class FlinkSink {
         }
 
         /**
-         * The table loader is used for loading tables in {@link IcebergFilesCommitter} lazily, we need this loader
+         * The table loader is used for loading tables in {@link IcebergSingleFileCommiter} lazily, we need this loader
          * because {@link Table} is not serializable and could not just use the loaded table from Builder#table in the
          * remote task manager.
          *
@@ -191,20 +226,76 @@ public class FlinkSink {
             return this;
         }
 
+        /**
+         * The catalog loader is used for loading tables in {@link IcebergMultipleStreamWriter} and
+         * {@link DynamicSchemaHandleOperator} lazily, we need this loader because in multiple sink scene which table
+         * to load is determined in runtime, so we should hold a {@link org.apache.iceberg.catalog.Catalog} at runtime.
+         *
+         * @param catalogLoader to load iceberg catalog inside tasks.
+         * @return {@link Builder} to connect the iceberg table.
+         */
+        public Builder catalogLoader(CatalogLoader catalogLoader) {
+            this.catalogLoader = catalogLoader;
+            return this;
+        }
+
+        public Builder multipleSink(boolean multipleSink) {
+            this.multipleSink = multipleSink;
+            return this;
+        }
+
+        public Builder multipleSinkOption(MultipleSinkOption multipleSinkOption) {
+            this.multipleSinkOption = multipleSinkOption;
+            return this;
+        }
+
         public Builder overwrite(boolean newOverwrite) {
             this.overwrite = newOverwrite;
+            writeOptions.put(FlinkWriteOptions.OVERWRITE_MODE.key(), Boolean.toString(newOverwrite));
+            return this;
+        }
+
+        /**
+         * The appendMode properties is used to insert data without equality field columns.
+         *
+         * @param appendMode append mode properties.
+         * @return {@link FlinkSink.Builder} to connect the iceberg table.
+         */
+        public FlinkSink.Builder appendMode(boolean appendMode) {
+            this.appendMode = appendMode;
+            return this;
+        }
+
+        /**
+         * The action properties is used to do some iceberg action like datafile rewrite action in flink runtime.
+         *
+         * @param actionProvider auto compact properties.
+         * @return {@link FlinkSink.Builder} to connect the iceberg table.
+         */
+        public FlinkSink.Builder action(ActionsProvider actionProvider) {
+            this.actionProvider = actionProvider;
             return this;
         }
 
         /**
          * Add metric output for iceberg writer
-         * @param inLongMetric
+         * @param inlongMetric
          * @param auditHostAndPorts
          * @return
          */
-        public Builder metric(String inLongMetric, String auditHostAndPorts) {
-            this.inLongMetric = inLongMetric;
+        public Builder metric(String inlongMetric, String auditHostAndPorts) {
+            this.inlongMetric = inlongMetric;
             this.auditHostAndPorts = auditHostAndPorts;
+            return this;
+        }
+
+        public Builder dirtyOptions(DirtyOptions dirtyOptions) {
+            this.dirtyOptions = dirtyOptions;
+            return this;
+        }
+
+        public Builder dirtySink(DirtySink<Object> dirtySink) {
+            this.dirtySink = dirtySink;
             return this;
         }
 
@@ -216,9 +307,12 @@ public class FlinkSink {
          * @return {@link Builder} to connect the iceberg table.
          */
         public Builder distributionMode(DistributionMode mode) {
-            Preconditions.checkArgument(!DistributionMode.RANGE.equals(mode),
+            Preconditions.checkArgument(
+                    !DistributionMode.RANGE.equals(mode),
                     "Flink does not support 'range' write distribution mode now.");
-            this.distributionMode = mode;
+            if (mode != null) {
+                writeOptions.put(FlinkWriteOptions.DISTRIBUTION_MODE.key(), mode.modeName());
+            }
             return this;
         }
 
@@ -243,7 +337,7 @@ public class FlinkSink {
          * @return {@link Builder} to connect the iceberg table.
          */
         public Builder upsert(boolean enabled) {
-            this.upsert = enabled;
+            writeOptions.put(FlinkWriteOptions.WRITE_UPSERT_ENABLED.key(), Boolean.toString(enabled));
             return this;
         }
 
@@ -286,6 +380,11 @@ public class FlinkSink {
         }
 
         private <T> DataStreamSink<T> chainIcebergOperators() {
+            return multipleSink ? chainIcebergMultipleSinkOperators() : chainIcebergSingleSinkOperators();
+        }
+
+        private <T> DataStreamSink<T> chainIcebergSingleSinkOperators() {
+
             Preconditions.checkArgument(inputCreator != null,
                     "Please use forRowData() or forMapperOutputType() to initialize the input DataStream.");
             Preconditions.checkNotNull(tableLoader, "Table loader shouldn't be null");
@@ -301,19 +400,41 @@ public class FlinkSink {
                 }
             }
 
+            flinkWriteConf = new FlinkWriteConf(table, writeOptions, readableConfig);
+
+            // Find out the equality field id list based on the user-provided equality field column names.
+            List<Integer> equalityFieldIds = checkAndGetEqualityFieldIds();
+
             // Convert the requested flink table schema to flink row type.
             RowType flinkRowType = toFlinkRowType(table.schema(), tableSchema);
 
             // Distribute the records from input data stream based on the write.distribution-mode.
             DataStream<RowData> distributeStream = distributeDataStream(
-                    rowDataInput, table.properties(), table.spec(), table.schema(), flinkRowType);
+                    rowDataInput, equalityFieldIds, table.spec(), table.schema(), flinkRowType);
 
             // Add parallel writers that append rows to files
-            SingleOutputStreamOperator<WriteResult> writerStream = appendWriter(distributeStream, flinkRowType);
+            SingleOutputStreamOperator<WriteResult> writerStream =
+                    appendWriter(distributeStream, flinkRowType, equalityFieldIds);
 
             // Add single-parallelism committer that commits files
             // after successful checkpoint or end of input
             SingleOutputStreamOperator<Void> committerStream = appendCommitter(writerStream);
+
+            // Add dummy discard sink
+            return appendDummySink(committerStream);
+        }
+
+        private <T> DataStreamSink<T> chainIcebergMultipleSinkOperators() {
+            Preconditions.checkArgument(inputCreator != null,
+                    "Please use forRowData() or forMapperOutputType() to initialize the input DataStream.");
+            DataStream<RowData> rowDataInput = inputCreator.apply(uidPrefix);
+
+            // Add parallel writers that append rows to files
+            SingleOutputStreamOperator<MultipleWriteResult> writerStream = appendMultipleWriter(rowDataInput);
+
+            // Add single-parallelism committer that commits files
+            // after successful checkpoint or end of input
+            SingleOutputStreamOperator<Void> committerStream = appendMultipleCommitter(writerStream);
 
             // Add dummy discard sink
             return appendDummySink(committerStream);
@@ -344,11 +465,41 @@ public class FlinkSink {
             return uidPrefix != null ? uidPrefix + "-" + suffix : suffix;
         }
 
+        @VisibleForTesting
+        List<Integer> checkAndGetEqualityFieldIds() {
+            List<Integer> equalityFieldIds = Lists.newArrayList(table.schema().identifierFieldIds());
+            if (equalityFieldColumns != null && equalityFieldColumns.size() > 0) {
+                Set<Integer> equalityFieldSet =
+                        Sets.newHashSetWithExpectedSize(equalityFieldColumns.size());
+                for (String column : equalityFieldColumns) {
+                    org.apache.iceberg.types.Types.NestedField field = table.schema().findField(column);
+                    Preconditions.checkNotNull(
+                            field,
+                            "Missing required equality field column '%s' in table schema %s",
+                            column,
+                            table.schema());
+                    equalityFieldSet.add(field.fieldId());
+                }
+
+                if (!equalityFieldSet.equals(table.schema().identifierFieldIds())) {
+                    LOG.warn(
+                            "The configured equality field column IDs {} are not matched with the schema identifier "
+                                    + "field IDs {}, use job specified equality field columns as the equality fields "
+                                    + "by default.",
+                            equalityFieldSet,
+                            table.schema().identifierFieldIds());
+                }
+                equalityFieldIds = Lists.newArrayList(equalityFieldSet);
+            }
+            return equalityFieldIds;
+        }
+
         @SuppressWarnings("unchecked")
         private <T> DataStreamSink<T> appendDummySink(SingleOutputStreamOperator<Void> committerStream) {
             DataStreamSink<T> resultStream = committerStream
                     .addSink(new DiscardingSink())
-                    .name(operatorName(String.format("IcebergSink %s", this.table.name())))
+                    .name(operatorName(
+                            String.format("IcebergSink %s", multipleSink ? "whole migration" : this.table.name())))
                     .setParallelism(1);
             if (uidPrefix != null) {
                 resultStream = resultStream.uid(uidPrefix + "-dummysink");
@@ -357,7 +508,12 @@ public class FlinkSink {
         }
 
         private SingleOutputStreamOperator<Void> appendCommitter(SingleOutputStreamOperator<WriteResult> writerStream) {
-            IcebergFilesCommitter filesCommitter = new IcebergFilesCommitter(tableLoader, overwrite);
+            IcebergProcessOperator<WriteResult, Void> filesCommitter = new IcebergProcessOperator<>(
+                    new IcebergSingleFileCommiter(
+                            TableIdentifier.of(table.name()),
+                            tableLoader,
+                            flinkWriteConf.overwriteMode(),
+                            actionProvider));
             SingleOutputStreamOperator<Void> committerStream = writerStream
                     .transform(operatorName(ICEBERG_FILES_COMMITTER_NAME), Types.VOID, filesCommitter)
                     .setParallelism(1)
@@ -368,25 +524,30 @@ public class FlinkSink {
             return committerStream;
         }
 
-        private SingleOutputStreamOperator<WriteResult> appendWriter(DataStream<RowData> input, RowType flinkRowType) {
-            // Find out the equality field id list based on the user-provided equality field column names.
-            List<Integer> equalityFieldIds = Lists.newArrayList();
-            if (equalityFieldColumns != null && equalityFieldColumns.size() > 0) {
-                for (String column : equalityFieldColumns) {
-                    org.apache.iceberg.types.Types.NestedField field = table.schema().findField(column);
-                    Preconditions.checkNotNull(field, "Missing required equality field column '%s' in table schema %s",
-                            column, table.schema());
-                    equalityFieldIds.add(field.fieldId());
-                }
+        private SingleOutputStreamOperator<Void> appendMultipleCommitter(
+                SingleOutputStreamOperator<MultipleWriteResult> writerStream) {
+            IcebergProcessOperator<MultipleWriteResult, Void> multipleFilesCommiter =
+                    new IcebergProcessOperator<>(new IcebergMultipleFilesCommiter(catalogLoader, overwrite));
+            SingleOutputStreamOperator<Void> committerStream = writerStream
+                    .transform(operatorName(ICEBERG_MULTIPLE_FILES_COMMITTER_NAME), Types.VOID, multipleFilesCommiter)
+                    .setParallelism(1)
+                    .setMaxParallelism(1);
+            if (uidPrefix != null) {
+                committerStream = committerStream.uid(uidPrefix + "-committer");
             }
+            return committerStream;
+        }
 
+        private SingleOutputStreamOperator<WriteResult> appendWriter(DataStream<RowData> input, RowType flinkRowType,
+                List<Integer> equalityFieldIds) {
             // Fallback to use upsert mode parsed from table properties if don't specify in job level.
-            boolean upsertMode = upsert || PropertyUtil.propertyAsBoolean(table.properties(),
-                    UPSERT_ENABLED, UPSERT_ENABLED_DEFAULT);
+            // Only if not appendMode, upsert can be valid.
+            boolean upsertMode = (flinkWriteConf.upsertMode() || PropertyUtil.propertyAsBoolean(table.properties(),
+                    UPSERT_ENABLED, UPSERT_ENABLED_DEFAULT)) && !appendMode;
 
             // Validate the equality fields and partition fields if we enable the upsert mode.
             if (upsertMode) {
-                Preconditions.checkState(!overwrite,
+                Preconditions.checkState(!flinkWriteConf.overwriteMode(),
                         "OVERWRITE mode shouldn't be enable when configuring to use UPSERT data stream.");
                 Preconditions.checkState(!equalityFieldIds.isEmpty(),
                         "Equality field columns shouldn't be empty when configuring to use UPSERT data stream.");
@@ -399,8 +560,9 @@ public class FlinkSink {
                 }
             }
 
-            IcebergStreamWriter<RowData> streamWriter = createStreamWriter(
-                    table, flinkRowType, equalityFieldIds, upsertMode, inLongMetric, auditHostAndPorts);
+            IcebergProcessOperator<RowData, WriteResult> streamWriter = createStreamWriter(
+                    table, flinkRowType, equalityFieldIds, flinkWriteConf,
+                    appendMode, inlongMetric, auditHostAndPorts, dirtyOptions, dirtySink);
 
             int parallelism = writeParallelism == null ? input.getParallelism() : writeParallelism;
             SingleOutputStreamOperator<WriteResult> writerStream = input
@@ -414,43 +576,103 @@ public class FlinkSink {
             return writerStream;
         }
 
-        private DataStream<RowData> distributeDataStream(DataStream<RowData> input,
-                Map<String, String> properties,
+        private SingleOutputStreamOperator<MultipleWriteResult> appendMultipleWriter(DataStream<RowData> input) {
+            // equality field will be initialized at runtime
+            // upsert mode will be initialized at runtime
+
+            int parallelism = writeParallelism == null ? input.getParallelism() : writeParallelism;
+            DynamicSchemaHandleOperator routeOperator = new DynamicSchemaHandleOperator(
+                    catalogLoader, multipleSinkOption, dirtyOptions, dirtySink, inlongMetric, auditHostAndPorts);
+            SingleOutputStreamOperator<RecordWithSchema> routeStream = input
+                    .transform(operatorName(ICEBERG_WHOLE_DATABASE_MIGRATION_NAME),
+                            TypeInformation.of(RecordWithSchema.class),
+                            routeOperator)
+                    .setParallelism(parallelism);
+
+            IcebergProcessOperator streamWriter =
+                    new IcebergProcessOperator(new IcebergMultipleStreamWriter(
+                            appendMode, catalogLoader, inlongMetric, auditHostAndPorts,
+                            multipleSinkOption, dirtyOptions, dirtySink));
+            SingleOutputStreamOperator<MultipleWriteResult> writerStream = routeStream
+                    .transform(operatorName(ICEBERG_MULTIPLE_STREAM_WRITER_NAME),
+                            TypeInformation.of(IcebergProcessOperator.class),
+                            streamWriter)
+                    .setParallelism(parallelism);
+            if (uidPrefix != null) {
+                writerStream = writerStream.uid(uidPrefix + "-writer");
+            }
+            return writerStream;
+        }
+
+        private DataStream<RowData> distributeDataStream(
+                DataStream<RowData> input,
+                List<Integer> equalityFieldIds,
                 PartitionSpec partitionSpec,
                 Schema iSchema,
                 RowType flinkRowType) {
-            DistributionMode writeMode;
-            if (distributionMode == null) {
-                // Fallback to use distribution mode parsed from table properties if don't specify in job level.
-                String modeName = PropertyUtil.propertyAsString(properties,
-                        WRITE_DISTRIBUTION_MODE,
-                        WRITE_DISTRIBUTION_MODE_NONE);
-
-                writeMode = DistributionMode.fromName(modeName);
-            } else {
-                writeMode = distributionMode;
-            }
-
+            DistributionMode writeMode = flinkWriteConf.distributionMode();
+            LOG.info("Write distribution mode is '{}'", writeMode.modeName());
             switch (writeMode) {
                 case NONE:
-                    return input;
-
-                case HASH:
-                    if (partitionSpec.isUnpartitioned()) {
+                    if (equalityFieldIds.isEmpty()) {
                         return input;
                     } else {
-                        return input.keyBy(new PartitionKeySelector(partitionSpec, iSchema, flinkRowType));
+                        LOG.info("Distribute rows by equality fields, because there are equality fields set");
+                        return input.keyBy(
+                                new EqualityFieldKeySelector(iSchema, flinkRowType, equalityFieldIds));
+                    }
+
+                case HASH:
+                    if (equalityFieldIds.isEmpty()) {
+                        if (partitionSpec.isUnpartitioned()) {
+                            LOG.warn(
+                                    "Fallback to use 'none' distribution mode, because there are no equality fields "
+                                            + "set and table is unpartitioned");
+                            return input;
+                        } else {
+                            return input.keyBy(new PartitionKeySelector(partitionSpec, iSchema, flinkRowType));
+                        }
+                    } else {
+                        if (partitionSpec.isUnpartitioned()) {
+                            LOG.info(
+                                    "Distribute rows by equality fields, because there are equality fields set "
+                                            + "and table is unpartitioned");
+                            return input.keyBy(
+                                    new EqualityFieldKeySelector(iSchema, flinkRowType, equalityFieldIds));
+                        } else {
+                            for (PartitionField partitionField : partitionSpec.fields()) {
+                                Preconditions.checkState(
+                                        equalityFieldIds.contains(partitionField.sourceId()),
+                                        "In 'hash' distribution mode with equality fields set, partition field '%s' "
+                                                + "should be included in equality fields: '%s'",
+                                        partitionField,
+                                        equalityFieldColumns);
+                            }
+                            return input.keyBy(new PartitionKeySelector(partitionSpec, iSchema, flinkRowType));
+                        }
                     }
 
                 case RANGE:
-                    LOG.warn("Fallback to use 'none' distribution mode, because {}={} is not supported in flink now",
-                            WRITE_DISTRIBUTION_MODE, DistributionMode.RANGE.modeName());
-                    return input;
+                    if (equalityFieldIds.isEmpty()) {
+                        LOG.warn(
+                                "Fallback to use 'none' distribution mode, because there are no equality fields set "
+                                        + "and {}=range is not supported yet in flink",
+                                WRITE_DISTRIBUTION_MODE);
+                        return input;
+                    } else {
+                        LOG.info(
+                                "Distribute rows by equality fields, because there are equality fields set "
+                                        + "and{}=range is not supported yet in flink",
+                                WRITE_DISTRIBUTION_MODE);
+                        return input.keyBy(
+                                new EqualityFieldKeySelector(iSchema, flinkRowType, equalityFieldIds));
+                    }
 
                 default:
-                    throw new RuntimeException("Unrecognized write.distribution-mode: " + writeMode);
+                    throw new RuntimeException("Unrecognized " + WRITE_DISTRIBUTION_MODE + ": " + writeMode);
             }
         }
+
     }
 
     static RowType toFlinkRowType(Schema schema, TableSchema requestedSchema) {
@@ -470,33 +692,32 @@ public class FlinkSink {
         }
     }
 
-    static IcebergStreamWriter<RowData> createStreamWriter(Table table,
+    static IcebergProcessOperator<RowData, WriteResult> createStreamWriter(Table table,
             RowType flinkRowType,
             List<Integer> equalityFieldIds,
-            boolean upsert,
-            String inLongMetric,
-            String auditHostAndPorts) {
+            FlinkWriteConf flinkWriteConf,
+            boolean appendMode,
+            String inlongMetric,
+            String auditHostAndPorts,
+            DirtyOptions dirtyOptions,
+            @Nullable DirtySink<Object> dirtySink) {
         Preconditions.checkArgument(table != null, "Iceberg table should't be null");
-        Map<String, String> props = table.properties();
-        long targetFileSize = getTargetFileSizeBytes(props);
-        FileFormat fileFormat = getFileFormat(props);
 
         Table serializableTable = SerializableTable.copyOf(table);
-        TaskWriterFactory<RowData> taskWriterFactory = new RowDataTaskWriterFactory(
-                serializableTable, flinkRowType, targetFileSize,
-                fileFormat, equalityFieldIds, upsert);
+        TaskWriterFactory<RowData> taskWriterFactory =
+                new RowDataTaskWriterFactory(
+                        serializableTable,
+                        serializableTable.schema(),
+                        flinkRowType,
+                        flinkWriteConf.targetDataFileSize(),
+                        flinkWriteConf.dataFileFormat(),
+                        equalityFieldIds,
+                        flinkWriteConf.upsertMode(),
+                        appendMode);
 
-        return new IcebergStreamWriter<>(table.name(), taskWriterFactory, inLongMetric, auditHostAndPorts);
+        return new IcebergProcessOperator<>(new IcebergSingleStreamWriter<>(
+                table.name(), taskWriterFactory, inlongMetric, auditHostAndPorts,
+                null, dirtyOptions, dirtySink, false));
     }
 
-    private static FileFormat getFileFormat(Map<String, String> properties) {
-        String formatString = properties.getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT);
-        return FileFormat.valueOf(formatString.toUpperCase(Locale.ENGLISH));
-    }
-
-    private static long getTargetFileSizeBytes(Map<String, String> properties) {
-        return PropertyUtil.propertyAsLong(properties,
-                WRITE_TARGET_FILE_SIZE_BYTES,
-                WRITE_TARGET_FILE_SIZE_BYTES_DEFAULT);
-    }
 }

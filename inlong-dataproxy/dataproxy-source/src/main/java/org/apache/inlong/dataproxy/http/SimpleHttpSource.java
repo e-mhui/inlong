@@ -27,6 +27,7 @@ import org.apache.flume.Context;
 import org.apache.flume.channel.ChannelProcessor;
 import org.apache.inlong.common.monitor.MonitorIndex;
 import org.apache.inlong.common.monitor.MonitorIndexExt;
+import org.apache.inlong.dataproxy.config.ConfigManager;
 import org.apache.inlong.dataproxy.config.remote.ConfigMessageServlet;
 import org.apache.inlong.dataproxy.metrics.DataProxyMetricItemSet;
 import org.apache.inlong.dataproxy.source.ServiceDecoder;
@@ -96,8 +97,8 @@ public class SimpleHttpSource extends HttpBaseSource {
                         "Keystore password is required for SSL Configuration");
             }
 
-            //ref: http://docs.codehaus.org/display/JETTY/Embedding+Jetty
-            //ref: http://jetty.codehaus.org/jetty/jetty-6/apidocs/org/mortbay/jetty/servlet
+            // ref: http://docs.codehaus.org/display/JETTY/Embedding+Jetty
+            // ref: http://jetty.codehaus.org/jetty/jetty-6/apidocs/org/mortbay/jetty/servlet
             // /Context.html
             subProps = context.getSubProperties(
                     HTTPSourceConfigurationConstants.CONFIG_HANDLER_PREFIX);
@@ -117,13 +118,14 @@ public class SimpleHttpSource extends HttpBaseSource {
         super.start();
         try {
 
-            @SuppressWarnings("unchecked") Class<? extends MessageHandler> clazz =
+            @SuppressWarnings("unchecked")
+            Class<? extends MessageHandler> clazz =
                     (Class<? extends MessageHandler>) Class.forName(messageHandlerName);
             Constructor ctor = clazz.getConstructor(ChannelProcessor.class,
                     MonitorIndex.class, MonitorIndexExt.class, DataProxyMetricItemSet.class, ServiceDecoder.class);
             LOG.info("Using channel processor:{}", getChannelProcessor().getClass().getName());
             messageHandler = (MessageHandler) ctor
-                    .newInstance(getChannelProcessor(), monitorIndex, monitorIndexExt, metricItemSet,null);
+                    .newInstance(getChannelProcessor(), monitorIndex, monitorIndexExt, metricItemSet, null);
             messageHandler.configure(new Context(subProps));
             srv = new Server(new QueuedThreadPool(threadPoolSize));
             Connector[] connectors = new Connector[1];
@@ -166,6 +168,8 @@ public class SimpleHttpSource extends HttpBaseSource {
             servletContext.addServlet(new ServletHolder(new ConfigMessageServlet()),
                     "/dataproxy/config/*");
             srv.start();
+            ConfigManager.getInstance().addSourceReportInfo(
+                    host, String.valueOf(port), "HTTP");
             Preconditions.checkArgument(srv.getHandler().equals(servletContext));
         } catch (ClassNotFoundException ex) {
             LOG.error("Error while configuring HTTPSource. Exception follows.", ex);

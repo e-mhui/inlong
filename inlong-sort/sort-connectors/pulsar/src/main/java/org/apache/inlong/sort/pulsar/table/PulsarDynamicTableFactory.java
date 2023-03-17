@@ -1,19 +1,18 @@
 /*
- *  Licensed to the Apache Software Foundation (ASF) under one
- *  or more contributor license agreements.  See the NOTICE file
- *  distributed with this work for additional information
- *  regarding copyright ownership.  The ASF licenses this file
- *  to you under the Apache License, Version 2.0 (the
- *  "License"); you may not use this file except in compliance
- *  with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.inlong.sort.pulsar.table;
@@ -77,8 +76,9 @@ import static org.apache.flink.streaming.connectors.pulsar.table.PulsarTableOpti
 import static org.apache.flink.streaming.connectors.pulsar.table.PulsarTableOptions.validateTableSourceOptions;
 import static org.apache.flink.table.factories.FactoryUtil.FORMAT;
 import static org.apache.flink.table.factories.FactoryUtil.SINK_PARALLELISM;
+import static org.apache.inlong.sort.base.Constants.AUDIT_KEYS;
 import static org.apache.inlong.sort.base.Constants.INLONG_AUDIT;
-import static org.apache.inlong.sort.pulsar.table.Constants.INLONG_METRIC;
+import static org.apache.inlong.sort.base.Constants.INLONG_METRIC;
 
 /**
  * Copy from io.streamnative.connectors:pulsar-flink-connector_2.11:1.13.6.1-rc9
@@ -87,9 +87,10 @@ import static org.apache.inlong.sort.pulsar.table.Constants.INLONG_METRIC;
  * {@link org.apache.flink.streaming.connectors.pulsar.table.PulsarDynamicTableFactory}.
  * We modify PulsarDynamicTableFactory validate logic to support nested format.
  */
-public class PulsarDynamicTableFactory implements
-        DynamicTableSourceFactory,
-        DynamicTableSinkFactory {
+public class PulsarDynamicTableFactory
+        implements
+            DynamicTableSourceFactory,
+            DynamicTableSinkFactory {
 
     public static final String IDENTIFIER = "pulsar-inlong";
 
@@ -152,8 +153,7 @@ public class PulsarDynamicTableFactory implements
                     "The Pulsar table '%s' with '%s' format doesn't support defining PRIMARY KEY constraint"
                             + " on the table, because it can't guarantee the semantic of primary key.",
                     tableName.asSummaryString(),
-                    formatName
-            ));
+                    formatName));
         }
     }
 
@@ -198,14 +198,12 @@ public class PulsarDynamicTableFactory implements
     // --------------------------------------------------------------------------------------------
 
     private PulsarDynamicTableSink createPulsarTableSink(ReadableConfig tableOptions, List<String> topics,
-                                                         String adminUrl, String serverUrl,
-                                                         Optional<EncodingFormat<SerializationSchema<RowData>>>
-                                                                 keyEncodingFormat,
-                                                         EncodingFormat<SerializationSchema<RowData>>
-                                                                 valueEncodingFormat,
-                                                         Properties properties, DataType physicalDataType,
-                                                         int[] keyProjection, int[] valueProjection,
-                                                         String keyPrefix, Context context) {
+            String adminUrl, String serverUrl,
+            Optional<EncodingFormat<SerializationSchema<RowData>>> keyEncodingFormat,
+            EncodingFormat<SerializationSchema<RowData>> valueEncodingFormat,
+            Properties properties, DataType physicalDataType,
+            int[] keyProjection, int[] valueProjection,
+            String keyPrefix, Context context) {
 
         final String formatType = tableOptions.getOptional(FORMAT).orElseGet(() -> tableOptions.get(VALUE_FORMAT));
         final Integer parallelism = tableOptions.getOptional(SINK_PARALLELISM).orElse(null);
@@ -273,8 +271,12 @@ public class PulsarDynamicTableFactory implements
 
         String adminUrl = tableOptions.get(ADMIN_URL);
         String serviceUrl = tableOptions.get(SERVICE_URL);
-        String inlongMetric = tableOptions.get(INLONG_METRIC);
+
+        String inlongMetric = tableOptions.getOptional(INLONG_METRIC).orElse(null);
+
         String auditHostAndPorts = tableOptions.get(INLONG_AUDIT);
+
+        String auditKeys = tableOptions.get(AUDIT_KEYS);
 
         return createPulsarTableSource(
                 physicalDataType,
@@ -290,7 +292,7 @@ public class PulsarDynamicTableFactory implements
                 properties,
                 startupOptions,
                 inlongMetric,
-                auditHostAndPorts);
+                auditHostAndPorts, auditKeys);
     }
 
     @Override
@@ -330,6 +332,7 @@ public class PulsarDynamicTableFactory implements
         options.add(PROPERTIES);
         options.add(INLONG_METRIC);
         options.add(INLONG_AUDIT);
+        options.add(AUDIT_KEYS);
 
         return options;
     }
@@ -361,8 +364,9 @@ public class PulsarDynamicTableFactory implements
             String adminUrl,
             Properties properties,
             PulsarTableOptions.StartupOptions startupOptions,
-            String inLongMetric,
-            String auditHostAndPorts) {
+            String inlongMetric,
+            String auditHostAndPorts,
+            String auditKeys) {
         return new PulsarDynamicTableSource(
                 physicalDataType,
                 keyDecodingFormat,
@@ -377,7 +381,8 @@ public class PulsarDynamicTableFactory implements
                 properties,
                 startupOptions,
                 false,
-                inLongMetric,
-                auditHostAndPorts);
+                inlongMetric,
+                auditHostAndPorts,
+                auditKeys);
     }
 }

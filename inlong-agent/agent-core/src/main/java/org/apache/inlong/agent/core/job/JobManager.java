@@ -28,6 +28,7 @@ import org.apache.inlong.agent.db.StateSearchKey;
 import org.apache.inlong.agent.metrics.AgentMetricItem;
 import org.apache.inlong.agent.metrics.AgentMetricItemSet;
 import org.apache.inlong.agent.utils.AgentUtils;
+import org.apache.inlong.agent.utils.GsonUtil;
 import org.apache.inlong.agent.utils.ThreadUtils;
 import org.apache.inlong.common.metric.MetricRegister;
 import org.slf4j.Logger;
@@ -78,6 +79,8 @@ public class JobManager extends AbstractDaemon {
     private final AgentMetricItemSet jobMetrics;
     private final Map<String, String> dimensions;
 
+    private final AgentConfiguration agentConf;
+
     /**
      * init job manager
      *
@@ -87,20 +90,18 @@ public class JobManager extends AbstractDaemon {
         this.jobProfileDb = jobProfileDb;
         this.agentManager = agentManager;
         // job thread pool for running
-        this.runningPool = new ThreadPoolExecutor(
-                0, Integer.MAX_VALUE,
-                60L, TimeUnit.SECONDS,
-                new SynchronousQueue<>(),
-                new AgentThreadFactory("job"));
+        this.runningPool = new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(), new AgentThreadFactory("job"));
         this.jobs = new ConcurrentHashMap<>();
+        this.agentConf = AgentConfiguration.getAgentConf();
         this.pendingJobs = new ConcurrentHashMap<>();
-        AgentConfiguration conf = AgentConfiguration.getAgentConf();
-        this.monitorInterval = conf
+        this.monitorInterval = agentConf
                 .getInt(
                         AgentConstants.JOB_MONITOR_INTERVAL, AgentConstants.DEFAULT_JOB_MONITOR_INTERVAL);
-        this.jobDbCacheTime = conf.getLong(JOB_DB_CACHE_TIME, DEFAULT_JOB_DB_CACHE_TIME);
-        this.jobDbCacheCheckInterval = conf.getLong(JOB_DB_CACHE_CHECK_INTERVAL, DEFAULT_JOB_DB_CACHE_CHECK_INTERVAL);
-        this.jobMaxSize = conf.getLong(JOB_NUMBER_LIMIT, DEFAULT_JOB_NUMBER_LIMIT);
+        this.jobDbCacheTime = agentConf.getLong(JOB_DB_CACHE_TIME, DEFAULT_JOB_DB_CACHE_TIME);
+        this.jobDbCacheCheckInterval = agentConf.getLong(JOB_DB_CACHE_CHECK_INTERVAL,
+                DEFAULT_JOB_DB_CACHE_CHECK_INTERVAL);
+        this.jobMaxSize = agentConf.getLong(JOB_NUMBER_LIMIT, DEFAULT_JOB_NUMBER_LIMIT);
 
         this.dimensions = new HashMap<>();
         this.dimensions.put(KEY_COMPONENT_NAME, this.getClass().getSimpleName());
@@ -114,16 +115,20 @@ public class JobManager extends AbstractDaemon {
      * @param job job
      */
     private void addJob(Job job) {
+        if (pendingJobs.containsKey(job.getJobInstanceId())) {
+            return;
+        }
         try {
             JobWrapper jobWrapper = new JobWrapper(agentManager, job);
-            this.runningPool.execute(jobWrapper);
             JobWrapper jobWrapperRet = jobs.putIfAbsent(jobWrapper.getJob().getJobInstanceId(), jobWrapper);
             if (jobWrapperRet != null) {
                 LOGGER.warn("{} has been added to running pool, "
                         + "cannot be added repeatedly", job.getJobInstanceId());
+                return;
             } else {
                 getJobMetric().jobRunningCount.incrementAndGet();
             }
+            this.runningPool.execute(jobWrapper);
         } catch (Exception rje) {
             LOGGER.debug("reject job {}", job.getJobInstanceId(), rje);
             pendingJobs.putIfAbsent(job.getJobInstanceId(), job);
@@ -196,7 +201,7 @@ public class JobManager extends AbstractDaemon {
             getJobConfDb().deleteJob(jobInstancId);
             return true;
         }
-        return false;
+        return true;
     }
 
     /**
@@ -241,6 +246,9 @@ public class JobManager extends AbstractDaemon {
             while (isRunnable()) {
                 try {
                     jobProfileDb.removeExpireJobs(jobDbCacheTime);
+                    // TODO: manager handles those job state in the future and it's saved locally now.
+                    Map<String, List<String>> jobStateMap = jobProfileDb.getJobsState();
+                    LOGGER.info("check local job state: {}", GsonUtil.toJson(jobStateMap));
                 } catch (Exception ex) {
                     LOGGER.error("removeExpireJobs error caught", ex);
                 }
@@ -292,14 +300,14 @@ public class JobManager extends AbstractDaemon {
     /**
      * check job existence using job file name
      */
-    public boolean checkJobExsit(String fileName) {
+    public boolean checkJobExist(String fileName) {
         return jobProfileDb.getJobByFileName(fileName) != null;
     }
 
     /**
      * get sql job existence
      */
-    public boolean sqlJobExsit() {
+    public boolean sqlJobExist() {
         return jobProfileDb.getJobById(SQL_JOB_ID) != null;
     }
 

@@ -34,25 +34,39 @@ public class FileJob {
     private String addictiveString;
     private String collectType;
     private Line line;
-    // INCREMENT 
-    // FULL
 
+    // INCREMENT
+    // FULL
     private String contentCollectType;
 
     private String envList;
 
-    private List<Map<String, String>> metaFields;
+    // JSON string, the content format is List<Map<String, String>>
+    private String metaFields;
 
     private String dataSeparator;
 
-    private Map<String, String> filterMetaByLabels;
+    // JSON string, the content format is Map<String,string>
+    private String filterMetaByLabels;
 
-    private Map<String, Object> properties;
+    // JSON string, the content format is Map<String,Object>
+    private String properties;
+
+    // Monitor interval for file
+    private Long monitorInterval;
+
+    // Monitor switch, 1 true and 0 false
+    private Integer monitorStatus;
+
+    // Monitor expire time and the time in milliseconds
+    private Long monitorExpire;
 
     @Data
     public static class Dir {
 
-        private String pattern;
+        private String patterns;
+
+        private String blackList;
     }
 
     @Data
@@ -77,12 +91,14 @@ public class FileJob {
     public static class FileJobTaskConfig {
 
         private String pattern;
+
+        private String blackList;
         // '1m' means one minute after, '-1m' means one minute before
         // '1h' means one hour after, '-1h' means one hour before
         // '1d' means one day after, '-1d' means one day before
         // Null means from current timestamp
         private String timeOffset;
-        //For example: a=b&c=b&e=f
+        // For example: a=b&c=b&e=f
         private String additionalAttr;
 
         private String collectType;
@@ -99,17 +115,26 @@ public class FileJob {
         private List<Map<String, String>> metaFields;
         // Type of data result for column separator
         // CSV format, set this parameter to a custom separator: , | :
-        // Json format, set this parameter to json 
+        // Json format, set this parameter to json
         private String dataContentStyle;
 
-        // Column separator of data source 
+        // Column separator of data source
         private String dataSeparator;
 
         // Metadata filters by label, special parameters for K8S
         private Map<String, String> filterMetaByLabels;
 
-        // Properties for File
+        // Properties for file
         private Map<String, Object> properties;
+
+        // Monitor interval for file
+        private Long monitorInterval;
+
+        // Monitor switch, 1 true and 0 false
+        private Integer monitorStatus;
+
+        // Monitor expire time and the time in milliseconds
+        private Long monitorExpire;
 
     }
 

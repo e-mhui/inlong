@@ -31,6 +31,7 @@
         <result column="uuid" jdbcType="VARCHAR" property="uuid"/>
         <result column="data_node_name" jdbcType="VARCHAR" property="dataNodeName"/>
         <result column="inlong_cluster_name" jdbcType="VARCHAR" property="inlongClusterName"/>
+        <result column="inlong_cluster_node_group" jdbcType="VARCHAR" property="inlongClusterNodeGroup"/>
         <result column="serialization_type" jdbcType="VARCHAR" property="serializationType"/>
         <result column="snapshot" jdbcType="LONGVARCHAR" property="snapshot"/>
         <result column="report_time" jdbcType="TIMESTAMP" property="reportTime"/>
@@ -46,22 +47,22 @@
     </resultMap>
     <sql id="Base_Column_List">
         id, inlong_group_id, inlong_stream_id, source_type, source_name, template_id, agent_ip, uuid,
-        data_node_name, inlong_cluster_name, serialization_type, snapshot, report_time, ext_params,
-        version, status, previous_status, is_deleted, creator, modifier, create_time, modify_time
+        data_node_name, inlong_cluster_name, inlong_cluster_node_group, serialization_type, snapshot, report_time,
+        ext_params, version, status, previous_status, is_deleted, creator, modifier, create_time, modify_time
     </sql>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id"
             parameterType="org.apache.inlong.manager.dao.entity.StreamSourceEntity">
         insert into stream_source (inlong_group_id, inlong_stream_id,
                                    source_type, source_name, template_id, agent_ip,
-                                   uuid, data_node_name, inlong_cluster_name,
+                                   uuid, data_node_name, inlong_cluster_name, inlong_cluster_node_group,
                                    serialization_type, snapshot,
                                    report_time, ext_params, status,
                                    previous_status, creator, modifier)
         values (#{inlongGroupId,jdbcType=VARCHAR}, #{inlongStreamId,jdbcType=VARCHAR},
                 #{sourceType,jdbcType=VARCHAR}, #{sourceName,jdbcType=VARCHAR}, #{templateId,jdbcType=INTEGER},
-                #{agentIp,jdbcType=VARCHAR},#{uuid,jdbcType=VARCHAR},
-                #{dataNodeName,jdbcType=VARCHAR}, #{inlongClusterName,jdbcType=VARCHAR},
+                #{agentIp,jdbcType=VARCHAR}, #{uuid,jdbcType=VARCHAR}, #{dataNodeName,jdbcType=VARCHAR},
+                #{inlongClusterName,jdbcType=VARCHAR}, #{inlongClusterNodeGroup,jdbcType=VARCHAR},
                 #{serializationType,jdbcType=VARCHAR}, #{snapshot,jdbcType=LONGVARCHAR},
                 #{modifyTime,jdbcType=TIMESTAMP}, #{extParams,jdbcType=LONGVARCHAR}, #{status,jdbcType=INTEGER},
                 #{previousStatus,jdbcType=INTEGER}, #{creator,jdbcType=VARCHAR}, #{modifier,jdbcType=VARCHAR})
@@ -96,6 +97,15 @@
         where id = #{id,jdbcType=INTEGER}
         for update
     </select>
+    <select id="selectOneByTemplatedIdAndAgentIp" resultType="org.apache.inlong.manager.dao.entity.StreamSourceEntity">
+        select
+        <include refid="Base_Column_List"/>
+        from stream_source
+        where template_id = #{templateId,jdbcType=INTEGER}
+        and agent_ip = #{agentIp, jdbcType=VARCHAR}
+        and is_deleted = 0
+        limit 1
+    </select>
     <select id="selectCount" resultType="java.lang.Integer">
         select count(1)
         from stream_source
@@ -117,12 +127,20 @@
         from stream_source
         <where>
             is_deleted = 0
-            and inlong_group_id = #{request.inlongGroupId, jdbcType=VARCHAR}
+            <if test="request.inlongGroupId != null and request.inlongGroupId != ''">
+                and inlong_group_id = #{request.inlongGroupId, jdbcType=VARCHAR}
+            </if>
             <if test="request.inlongStreamId != null and request.inlongStreamId != ''">
                 and inlong_stream_id = #{request.inlongStreamId, jdbcType=VARCHAR}
             </if>
             <if test="request.sourceType != null and request.sourceType != ''">
                 and source_type = #{request.sourceType, jdbcType=VARCHAR}
+            </if>
+            <if test="request.dataNodeName != null and request.dataNodeName != ''">
+                and data_node_name = #{request.dataNodeName, jdbcType=VARCHAR}
+            </if>
+            <if test="request.inlongClusterName != null and request.inlongClusterName != ''">
+                and inlong_cluster_name = #{request.inlongClusterName, jdbcType=VARCHAR}
             </if>
             <if test="request.keyword != null and request.keyword != ''">
                 and (
@@ -133,6 +151,12 @@
             </if>
             <if test="request.status != null and request.status != ''">
                 and status = #{request.status, jdbcType=INTEGER}
+            </if>
+            <if test="request.statusList != null and request.statusList.size() > 0">
+                and status in
+                <foreach collection="request.statusList" item="status" index="index" open="(" close=")" separator=",">
+                    #{status}
+                </foreach>
             </if>
             and template_id is NULL
         </where>
@@ -203,7 +227,7 @@
             limit #{limit, jdbcType=INTEGER}
         </where>
     </select>
-    <select id="selectByAgentIpOrCluster" resultType="org.apache.inlong.manager.dao.entity.StreamSourceEntity">
+    <select id="selectByAgentIpAndCluster" resultType="org.apache.inlong.manager.dao.entity.StreamSourceEntity">
         select
         <include refid="Base_Column_List"/>
         from stream_source
@@ -221,22 +245,46 @@
                     #{item}
                 </foreach>
             </if>
-            and (agent_ip = #{agentIp, jdbcType=VARCHAR} or inlong_cluster_name = #{clusterName, jdbcType=VARCHAR})
-            limit #{limit, jdbcType=INTEGER}
+            <if test="agentIp != null and agentIp != ''">
+                and agent_ip = #{agentIp, jdbcType=VARCHAR}
+            </if>
+            and inlong_cluster_name = #{clusterName, jdbcType=VARCHAR}
         </where>
     </select>
-    <select id="selectByStatusAndIp" resultType="org.apache.inlong.manager.dao.entity.StreamSourceEntity">
+    <select id="selectTemplateSourceByCluster" resultType="org.apache.inlong.manager.dao.entity.StreamSourceEntity">
         select
         <include refid="Base_Column_List"/>
         from stream_source
         <where>
-            agent_ip = #{agentIp, jdbcType=VARCHAR}
+            is_deleted = 0
             <if test="statusList != null and statusList.size()>0">
                 and status in
                 <foreach item="item" index="index" collection="statusList" open="(" close=")" separator=",">
                     #{item}
                 </foreach>
             </if>
+            <if test="sourceTypeList != null and sourceTypeList.size()>0">
+                and source_type in
+                <foreach item="item" index="index" collection="sourceTypeList" open="(" close=")" separator=",">
+                    #{item}
+                </foreach>
+            </if>
+            and agent_ip is NULL
+            and template_id is NULL
+            and inlong_cluster_name = #{clusterName, jdbcType=VARCHAR}
+        </where>
+    </select>
+    <select id="selectByStatusAndCluster" resultType="org.apache.inlong.manager.dao.entity.StreamSourceEntity">
+        select
+        <include refid="Base_Column_List"/>
+        from stream_source
+        <where>
+            (inlong_cluster_name = #{clusterName, jdbcType=VARCHAR} or inlong_cluster_name is NULL)
+            and agent_ip = #{agentIp, jdbcType=VARCHAR}
+            and `status` in
+            <foreach item="item" index="index" collection="statusList" open="(" close=")" separator=",">
+                #{item}
+            </foreach>
             <if test="uuid != null and uuid != ''">
                 and uuid = #{uuid, jdbcType=VARCHAR}
             </if>
@@ -271,6 +319,41 @@
             for update
         </where>
     </select>
+    <select id="selectNeedUpdateIdsByClusterAndDataNode" resultType="java.lang.Integer">
+        select source.id
+        from stream_source source, inlong_stream stream, inlong_group inlong_group
+        <where>
+            source.is_deleted = 0
+            and inlong_group.inlong_group_id = source.inlong_group_id
+            and inlong_group.is_deleted = 0
+            and inlong_group.status in (120, 130)
+            and stream.inlong_group_id = source.inlong_group_id
+            and stream.is_deleted = 0
+            and stream.status in (120, 130)
+            and source.status not in (99, 110)
+            <if test="clusterName != null">
+                and source.inlong_cluster_name = #{clusterName, jdbcType=VARCHAR}
+            </if>
+            <if test="nodeName != null">
+                and source.data_node_name = #{nodeName, jdbcType=VARCHAR}
+            </if>
+            <if test="sourceType != null">
+                and source.source_type = #{sourceType, jdbcType=VARCHAR}
+            </if>
+        </where>
+    </select>
+    <update id="updateByRelatedId">
+        update stream_source
+        <set>
+            is_deleted = id,
+            previous_status = status,
+            status = #{status, jdbcType=INTEGER},
+            version = version + 1
+        </set>
+        where is_deleted = 0
+        and inlong_group_id = #{groupId, jdbcType=VARCHAR}
+        and inlong_stream_id = #{streamId, jdbcType=VARCHAR}
+    </update>
 
     <update id="updateByPrimaryKeySelective" parameterType="org.apache.inlong.manager.dao.entity.StreamSourceEntity">
         update stream_source
@@ -298,6 +381,9 @@
             </if>
             <if test="inlongClusterName != null">
                 inlong_cluster_name = #{inlongClusterName,jdbcType=INTEGER},
+            </if>
+            <if test="inlongClusterNodeGroup != null">
+                inlong_cluster_node_group = #{inlongClusterNodeGroup,jdbcType=INTEGER},
             </if>
             <if test="serializationType != null">
                 serialization_type = #{serializationType,jdbcType=VARCHAR},
@@ -341,6 +427,7 @@
             uuid                = #{uuid,jdbcType=VARCHAR},
             data_node_name      = #{dataNodeName,jdbcType=VARCHAR},
             inlong_cluster_name = #{inlongClusterName,jdbcType=VARCHAR},
+            inlong_cluster_node_group = #{inlongClusterNodeGroup,jdbcType=VARCHAR},
             serialization_type  = #{serializationType,jdbcType=VARCHAR},
             snapshot            = #{snapshot,jdbcType=LONGVARCHAR},
             report_time         = #{reportTime,jdbcType=TIMESTAMP},
@@ -352,7 +439,7 @@
             creator             = #{creator,jdbcType=VARCHAR},
             modifier            = #{modifier,jdbcType=VARCHAR}
         where id = #{id,jdbcType=INTEGER}
-        and version = #{version,jdbcType=INTEGER}
+          and version = #{version,jdbcType=INTEGER}
     </update>
     <update id="updateStatus">
         update stream_source
@@ -368,10 +455,13 @@
         set previous_status = status,
         status = #{nextStatus, jdbcType=INTEGER}
         <where>
-            inlong_group_id = #{groupId, jdbcType=VARCHAR}
+            is_deleted = 0
+            and status != 101
+            and inlong_group_id = #{groupId, jdbcType=VARCHAR}
             <if test="streamId != null">
                 and inlong_stream_id = #{streamId, jdbcType=VARCHAR}
             </if>
+            and source_type != 'AUTO_PUSH'
         </where>
     </update>
     <update id="updateIpAndUuid">
@@ -390,10 +480,23 @@
             modify_time = modify_time
         where id = #{id,jdbcType=INTEGER}
     </update>
-    <update id="appendAgentIp">
+    <update id="updateStatusByIds">
         update stream_source
-        set agent_ip = IF(agent_ip is NULL or agent_ip = '', #{agentIp,jdbcType=VARCHAR}, CONCAT(agent_ip, ',', #{agentIp}))
-        where id = #{id,jdbcType=INTEGER}
+        <set>
+            previous_status = status,
+            status          = #{status, jdbcType=INTEGER},
+            modifier        = #{operator, jdbcType=VARCHAR},
+            version         = version + 1
+        </set>
+        <where>
+            is_deleted = 0
+            <if test="idList != null and idList.size() > 0">
+                and id in
+                <foreach item="item" index="index" collection="idList" open="(" close=")" separator=",">
+                    #{item}
+                </foreach>
+            </if>
+        </where>
     </update>
 
     <delete id="deleteByRelatedId">
@@ -405,5 +508,13 @@
         <if test="streamId != null and streamId != ''">
             and inlong_stream_id = #{streamId, jdbcType=VARCHAR}
         </if>
+    </delete>
+    <delete id="deleteByInlongGroupIds">
+        delete
+        from stream_source
+        where inlong_group_id in
+        <foreach item="item" index="index" collection="groupIdList" open="(" close=")" separator=",">
+            #{item}
+        </foreach>
     </delete>
 </mapper>

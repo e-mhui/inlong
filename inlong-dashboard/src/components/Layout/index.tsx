@@ -18,7 +18,7 @@
  */
 
 import { config } from '@/configs/default';
-import menus from '@/configs/menus';
+import menusTree from '@/configs/menus';
 import defaultSettings from '@/defaultSettings';
 import { useLocation, useSelector } from '@/hooks';
 import { isDevelopEnv } from '@/utils';
@@ -33,7 +33,6 @@ import { Link } from 'react-router-dom';
 import type { MenuProps } from 'antd/es/menu';
 import { State } from '@/models';
 import NavWidget from './NavWidget';
-import './index.css';
 
 const renderMenuItem = (menus: MenuDataItem[]): MenuDataItem[] =>
   menus.map(({ icon, children, ...item }) => ({
@@ -50,7 +49,7 @@ const BasicLayout: React.FC = props => {
   const { pathname } = location;
   const roles = useSelector<State, State['roles']>(state => state.roles);
   const { breadcrumbMap, menuData } = useMemo(() => {
-    const _menus = menus.filter(
+    const _menus = menusTree.filter(
       item => (item.isAdmin && roles?.includes('ADMIN')) || !item.isAdmin,
     );
     return getMenuData(_menus);

@@ -57,13 +57,14 @@ public class KafkaSource extends StreamSource {
     @ApiModelProperty("Limit the number of bytes read per second")
     private String byteSpeedLimit;
 
-    @ApiModelProperty(value = "Topic partition offset",
-            notes = "For example,'partition:0,offset:42;partition:1,offset:300' "
-                    + "indicates offset 42 for partition 0 and offset 300 for partition 1.")
+    @ApiModelProperty(value = "Topic partition offset", notes = "For example,'partition:0,offset:42;partition:1,offset:300' "
+            + "indicates offset 42 for partition 0 and offset 300 for partition 1.")
     private String partitionOffsets;
 
-    @ApiModelProperty(value = "The strategy of auto offset reset",
-            notes = "including earliest, specific, latest (the default), none")
+    @ApiModelProperty(value = "timestamp is millis")
+    private String timestampMillis;
+
+    @ApiModelProperty(value = "The strategy of auto offset reset", notes = "including earliest, specific, latest (the default), none")
     private String autoOffsetReset;
 
     @ApiModelProperty("database pattern used for filter in canal format")
@@ -80,6 +81,18 @@ public class KafkaSource extends StreamSource {
 
     @ApiModelProperty("Primary key, needed when serialization type is csv, json, avro")
     private String primaryKey;
+
+    @ApiModelProperty(value = "Data encoding format: UTF-8, GBK")
+    private String dataEncoding;
+
+    @ApiModelProperty(value = "Data separator")
+    private String dataSeparator;
+
+    @ApiModelProperty(value = "Data field escape symbol")
+    private String dataEscapeChar;
+
+    @ApiModelProperty("Whether wrap content with InlongMsg")
+    private boolean wrapWithInlongMsg = true;
 
     public KafkaSource() {
         this.setSourceType(SourceType.KAFKA);

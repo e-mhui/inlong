@@ -17,8 +17,6 @@
 
 package org.apache.inlong.manager.pojo.sink.kafka;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,6 +24,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
+import org.apache.inlong.manager.common.util.JsonUtils;
 
 import javax.validation.constraints.NotNull;
 import java.util.Map;
@@ -39,8 +38,6 @@ import java.util.Map;
 @AllArgsConstructor
 public class KafkaSinkDTO {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     @ApiModelProperty("Kafka bootstrap servers")
     private String bootstrapServers;
 
@@ -53,8 +50,7 @@ public class KafkaSinkDTO {
     @ApiModelProperty("Data Serialization, support: json, canal, avro")
     private String serializationType;
 
-    @ApiModelProperty(value = "The strategy of auto offset reset",
-            notes = "including earliest, latest (the default), none")
+    @ApiModelProperty(value = "The strategy of auto offset reset", notes = "including earliest, latest (the default), none")
     private String autoOffsetReset;
 
     @ApiModelProperty("Primary key is required when serializationType is json, avro")
@@ -80,10 +76,10 @@ public class KafkaSinkDTO {
 
     public static KafkaSinkDTO getFromJson(@NotNull String extParams) {
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, KafkaSinkDTO.class);
+            return JsonUtils.parseObject(extParams, KafkaSinkDTO.class);
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT,
+                    String.format("parse extParams of Kafka SinkDTO failure: %s", e.getMessage()));
         }
     }
 }

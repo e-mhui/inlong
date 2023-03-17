@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -202,6 +203,11 @@ public abstract class AbstractConfiguration {
         return value == null ? defaultValue : value.getAsBoolean();
     }
 
+    public float getFloat(String key, float defaultValue) {
+        JsonElement value = configStorage.get(key);
+        return value == null ? defaultValue : value.getAsFloat();
+    }
+
     /**
      * get string
      *
@@ -246,7 +252,15 @@ public abstract class AbstractConfiguration {
      * @param value value
      */
     public void set(String key, String value) {
-        configStorage.put(key, new JsonPrimitive(value));
+        if (value != null) {
+            configStorage.put(key, new JsonPrimitive(value));
+            return;
+        }
+
+        // del
+        if (configStorage.containsKey(key)) {
+            configStorage.remove(key);
+        }
     }
 
     public void setInt(String key, int value) {
@@ -276,6 +290,9 @@ public abstract class AbstractConfiguration {
         return configStorage;
     }
 
+    public URL getConfigLocation(String fileName) {
+        return classLoader.getResource(fileName);
+    }
 
     /**
      * get configStorage list, item format: "key=value"

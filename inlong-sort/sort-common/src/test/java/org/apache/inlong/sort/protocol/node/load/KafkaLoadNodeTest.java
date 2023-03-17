@@ -41,7 +41,8 @@ public class KafkaLoadNodeTest extends SerializeBaseTest<KafkaLoadNode> {
         return new KafkaLoadNode("1", null,
                 Arrays.asList(new FieldInfo("field", new StringFormatInfo())),
                 Arrays.asList(new FieldRelation(new FieldInfo("field", new StringFormatInfo()),
-                        new FieldInfo("field", new StringFormatInfo()))), null, null,
+                        new FieldInfo("field", new StringFormatInfo()))),
+                null, null,
                 "topic", "localhost:9092", new CanalJsonFormat(),
                 1, new TreeMap<>(), null);
     }
@@ -50,10 +51,11 @@ public class KafkaLoadNodeTest extends SerializeBaseTest<KafkaLoadNode> {
     public void testMetaFields() {
         Map<MetaField, String> formatMap = new HashMap<>();
         formatMap.put(MetaField.PROCESS_TIME, "AS PROCTIME()");
-        formatMap.put(MetaField.DATA, "STRING METADATA FROM 'value.data'");
+        formatMap.put(MetaField.DATA_CANAL, "STRING METADATA FROM 'value.data_canal'");
+        formatMap.put(MetaField.DATA, "STRING METADATA FROM 'value.data_canal'");
         formatMap.put(MetaField.TABLE_NAME, "STRING METADATA FROM 'value.table'");
         formatMap.put(MetaField.DATABASE_NAME, "STRING METADATA FROM 'value.database'");
-        formatMap.put(MetaField.OP_TYPE, "STRING METADATA FROM 'value.op-type'");
+        formatMap.put(MetaField.OP_TYPE, "STRING METADATA FROM 'value.type'");
         formatMap.put(MetaField.OP_TS, "TIMESTAMP_LTZ(3) METADATA FROM 'value.event-timestamp'");
         formatMap.put(MetaField.IS_DDL, "BOOLEAN METADATA FROM 'value.is-ddl'");
         formatMap.put(MetaField.TS, "TIMESTAMP_LTZ(3) METADATA FROM 'value.ingestion-timestamp'");

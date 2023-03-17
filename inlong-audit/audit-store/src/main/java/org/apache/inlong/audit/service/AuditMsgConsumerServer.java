@@ -22,6 +22,7 @@ import org.apache.inlong.audit.config.MessageQueueConfig;
 import org.apache.inlong.audit.config.StoreConfig;
 import org.apache.inlong.audit.db.dao.AuditDataDao;
 import org.apache.inlong.audit.service.consume.BaseConsume;
+import org.apache.inlong.audit.service.consume.KafkaConsume;
 import org.apache.inlong.audit.service.consume.PulsarConsume;
 import org.apache.inlong.audit.service.consume.TubeConsume;
 import org.slf4j.Logger;
@@ -47,6 +48,8 @@ public class AuditMsgConsumerServer implements InitializingBean {
     private StoreConfig storeConfig;
     @Autowired
     private ClickHouseConfig chConfig;
+    // ClickHouseService
+    private ClickHouseService ckService;
 
     /**
      * Initializing bean
@@ -58,13 +61,18 @@ public class AuditMsgConsumerServer implements InitializingBean {
             mqConsume = new PulsarConsume(insertServiceList, storeConfig, mqConfig);
         } else if (mqConfig.isTube()) {
             mqConsume = new TubeConsume(insertServiceList, storeConfig, mqConfig);
+        } else if (mqConfig.isKafka()) {
+            mqConsume = new KafkaConsume(insertServiceList, storeConfig, mqConfig);
         } else {
-            LOG.error("unkown MessageQueue {}", mqConfig.getMqType());
+            LOG.error("unknown MessageQueue {}", mqConfig.getMqType());
             return;
         }
 
         if (storeConfig.isElasticsearchStore()) {
             esService.startTimerRoutine();
+        }
+        if (storeConfig.isClickHouseStore()) {
+            ckService.start();
         }
         mqConsume.start();
     }
@@ -82,7 +90,9 @@ public class AuditMsgConsumerServer implements InitializingBean {
             insertServiceList.add(esService);
         }
         if (storeConfig.isClickHouseStore()) {
-            insertServiceList.add(new ClickHouseService(chConfig));
+            // create ck object
+            ckService = new ClickHouseService(chConfig);
+            insertServiceList.add(ckService);
         }
         return insertServiceList;
     }

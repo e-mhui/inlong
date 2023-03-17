@@ -17,6 +17,7 @@
 
 package org.apache.inlong.manager.workflow.plugin;
 
+import org.apache.inlong.manager.common.plugin.Plugin;
 import org.apache.inlong.manager.workflow.event.task.QueueOperateListener;
 import org.apache.inlong.manager.workflow.event.task.SinkOperateListener;
 import org.apache.inlong.manager.workflow.event.task.SortOperateListener;

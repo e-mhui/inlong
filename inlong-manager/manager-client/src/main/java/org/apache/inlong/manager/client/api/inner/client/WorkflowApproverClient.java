@@ -18,13 +18,14 @@
 package org.apache.inlong.manager.client.api.inner.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.service.WorkflowApproverApi;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.util.JsonUtils;
 import org.apache.inlong.manager.common.util.Preconditions;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.common.Response;
 import org.apache.inlong.manager.pojo.workflow.ApproverPageRequest;
 import org.apache.inlong.manager.pojo.workflow.ApproverRequest;
@@ -52,9 +53,12 @@ public class WorkflowApproverClient {
      * @param request approver request
      */
     public Integer save(ApproverRequest request) {
-        Preconditions.checkNotEmpty(request.getProcessName(), "process name cannot be empty");
-        Preconditions.checkNotEmpty(request.getTaskName(), "task name cannot be empty");
-        Preconditions.checkNotEmpty(request.getApprovers(), "approvers cannot be empty");
+        Preconditions.expectNotBlank(request.getProcessName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "process name cannot be empty");
+        Preconditions.expectNotBlank(request.getTaskName(), ErrorCodeEnum.INVALID_PARAMETER,
+                "task name cannot be empty");
+        Preconditions.expectNotBlank(request.getApprovers(), ErrorCodeEnum.INVALID_PARAMETER,
+                "approvers cannot be empty");
 
         Response<Integer> response = ClientUtils.executeHttpCall(workflowApproverApi.save(request));
         ClientUtils.assertRespSuccess(response);
@@ -69,7 +73,7 @@ public class WorkflowApproverClient {
      * @return approver info
      */
     public ApproverResponse get(Integer id) {
-        Preconditions.checkNotNull(id, "id cannot be null");
+        Preconditions.expectNotNull(id, "id cannot be null");
 
         Response<ApproverResponse> response = ClientUtils.executeHttpCall(workflowApproverApi.get(id));
         ClientUtils.assertRespSuccess(response);
@@ -84,13 +88,13 @@ public class WorkflowApproverClient {
      * @return approver list
      */
     public List<ApproverResponse> listByCondition(ApproverPageRequest request) {
-        Preconditions.checkNotNull(request.getPageNum(), "page num cannot be null");
-        Preconditions.checkNotNull(request.getPageSize(), "page size cannot be null");
+        Preconditions.expectNotNull(request.getPageNum(), "page num cannot be null");
+        Preconditions.expectNotNull(request.getPageSize(), "page size cannot be null");
 
         Map<String, Object> requestMap = JsonUtils.OBJECT_MAPPER.convertValue(request,
                 new TypeReference<Map<String, Object>>() {
                 });
-        Response<PageInfo<ApproverResponse>> response = ClientUtils.executeHttpCall(
+        Response<PageResult<ApproverResponse>> response = ClientUtils.executeHttpCall(
                 workflowApproverApi.listByCondition(requestMap));
         ClientUtils.assertRespSuccess(response);
 
@@ -103,7 +107,7 @@ public class WorkflowApproverClient {
      * @param id approver id
      */
     public Boolean delete(Integer id) {
-        Preconditions.checkNotNull(id, "id cannot be null");
+        Preconditions.expectNotNull(id, "id cannot be null");
 
         Response<Boolean> response = ClientUtils.executeHttpCall(workflowApproverApi.delete(id));
         ClientUtils.assertRespSuccess(response);
@@ -117,7 +121,7 @@ public class WorkflowApproverClient {
      * @param request approver request
      */
     public Integer update(ApproverRequest request) {
-        Preconditions.checkNotNull(request.getId(), "id cannot be null");
+        Preconditions.expectNotNull(request.getId(), "id cannot be null");
 
         Response<Integer> response = ClientUtils.executeHttpCall(workflowApproverApi.update(request));
         ClientUtils.assertRespSuccess(response);

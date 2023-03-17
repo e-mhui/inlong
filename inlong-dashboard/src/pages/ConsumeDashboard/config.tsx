@@ -17,13 +17,12 @@
  * under the License.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Button } from 'antd';
 import { Link } from 'react-router-dom';
 import i18n from '@/i18n';
 import { DashTotal, DashToBeAssigned, DashPending, DashRejected } from '@/components/Icons';
-import { consumptionForm, consumptionTable } from '@/metas/consumption';
-import { pickObjectArray } from '@/utils';
+import { useDefaultMeta, useLoadMeta, ConsumeMetaType } from '@/metas';
 
 export const dashCardList = [
   {
@@ -48,31 +47,21 @@ export const dashCardList = [
   },
 ];
 
-export const getFilterFormContent = defaultValues =>
-  [
-    {
-      type: 'inputsearch',
-      name: 'keyword',
-      initialValue: defaultValues.keyword,
-      props: {
-        allowClear: true,
-      },
-    },
-  ].concat(
-    pickObjectArray(['status', 'lastConsumptionStatus'], consumptionForm).map(item => ({
-      ...item,
-      visible: true,
-      initialValue: defaultValues[item.name],
-    })),
-  );
+export const useColumns = ({ onDelete }) => {
+  const { defaultValue } = useDefaultMeta('consume');
 
-export const getColumns = ({ onDelete }) => {
-  const genCreateUrl = record => `/consume/create?id=${record.id}`;
+  const { Entity } = useLoadMeta<ConsumeMetaType>('consume', defaultValue);
+
+  const entityColumns = useMemo(() => {
+    return Entity ? new Entity().renderList() : [];
+  }, [Entity]);
+
+  const genCreateUrl = record => `/consume/create/${record.id}`;
   const genDetailUrl = record =>
-    record.status === 10 ? genCreateUrl(record) : `/consume/detail/${record.id}`;
+    [0, 10].includes(record.status) ? genCreateUrl(record) : `/consume/detail/${record.id}`;
 
-  return consumptionTable
-    .map(item => {
+  return entityColumns
+    ?.map(item => {
       if (item.dataIndex === 'consumerGroup') {
         return { ...item, render: (text, record) => <Link to={genDetailUrl(record)}>{text}</Link> };
       }

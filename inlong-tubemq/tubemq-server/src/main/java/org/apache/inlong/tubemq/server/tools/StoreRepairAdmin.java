@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -32,6 +32,9 @@ import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.inlong.tubemq.corebase.TBaseConstants;
+import org.apache.inlong.tubemq.corebase.utils.CheckSum;
 import org.apache.inlong.tubemq.corebase.utils.TStringUtils;
 import org.apache.inlong.tubemq.server.broker.msgstore.disk.FileSegment;
 import org.apache.inlong.tubemq.server.broker.msgstore.disk.FileSegmentList;
@@ -48,6 +51,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class StoreRepairAdmin {
+
     private static final Logger logger =
             LoggerFactory.getLogger(StoreRepairAdmin.class);
 
@@ -117,6 +121,7 @@ public class StoreRepairAdmin {
                     }
                     final int storeId = Integer.parseInt(name.substring(index + 1));
                     tasks.add(new Callable<IndexRepairStore>() {
+
                         @Override
                         public IndexRepairStore call() throws Exception {
                             StringBuilder sBuilder = new StringBuilder(512);
@@ -164,9 +169,7 @@ public class StoreRepairAdmin {
     }
 
     private static class IndexRepairStore implements Closeable {
-        private static final String DATA_SUFFIX = ".tube";
-        private static final String INDEX_SUFFIX = ".index";
-        private static final int ONE_M_BYTES = 10 * 1024 * 1024;
+
         private final String topic;
         private final int storeId;
         private final String basePath;
@@ -180,8 +183,8 @@ public class StoreRepairAdmin {
         private SegmentList segments;
 
         public IndexRepairStore(final String basePath,
-                               final String topic,
-                               final int storeId) {
+                final String topic,
+                final int storeId) {
             this.basePath = basePath;
             this.topic = topic;
             this.storeId = storeId;
@@ -251,6 +254,7 @@ public class StoreRepairAdmin {
             if (accum.size() > 0) {
                 // compare segment's start value, and sort order
                 Collections.sort(accum, new Comparator<Segment>() {
+
                     @Override
                     public int compare(final Segment o1, final Segment o2) {
                         if (o1.getStart() == o2.getStart()) {
@@ -331,9 +335,9 @@ public class StoreRepairAdmin {
             if (segments.length == 0) {
                 return;
             }
-            long gQueueOffset = -1;
             Segment curPartSeg = null;
-            final ByteBuffer dataBuffer = ByteBuffer.allocate(ONE_M_BYTES);
+            final ByteBuffer dataBuffer =
+                    ByteBuffer.allocate(TBaseConstants.META_MAX_MESSAGE_DATA_SIZE_UPPER_LIMIT);
             final ByteBuffer indexBuffer =
                     ByteBuffer.allocate(DataStoreUtils.STORE_INDEX_HEAD_LEN);
             for (Segment curSegment : segments) {
@@ -344,54 +348,72 @@ public class StoreRepairAdmin {
                     long curOffset = 0L;
                     while (curOffset < curSegment.getCachedSize()) {
                         dataBuffer.clear();
-                        curSegment.read(dataBuffer, curOffset);
+                        curSegment.relRead(dataBuffer, curOffset);
                         dataBuffer.flip();
-                        int dataStart = 0;
                         int dataRealLimit = dataBuffer.limit();
-                        for (dataStart = 0; dataStart < dataRealLimit; ) {
-                            if (dataRealLimit - dataStart < DataStoreUtils.STORE_DATA_HEADER_LEN) {
-                                dataStart += DataStoreUtils.STORE_DATA_HEADER_LEN;
+                        if (dataRealLimit < DataStoreUtils.STORE_DATA_HEADER_LEN) {
+                            break;
+                        }
+                        int dataStart = 0;
+                        while (dataStart < dataRealLimit) {
+                            if (dataRealLimit - dataStart <= DataStoreUtils.STORE_DATA_HEADER_LEN) {
                                 break;
                             }
+                            // read message fields
                             final int msgLen =
                                     dataBuffer.getInt(dataStart + DataStoreUtils.STORE_HEADER_POS_LENGTH);
                             final int msgToken =
                                     dataBuffer.getInt(dataStart + DataStoreUtils.STORE_HEADER_POS_DATATYPE);
-                            if (msgToken != DataStoreUtils.STORE_DATA_TOKER_BEGIN_VALUE) {
+                            final int checkSum =
+                                    dataBuffer.getInt(dataStart + DataStoreUtils.STORE_HEADER_POS_CHECKSUM);
+                            final int partitionId =
+                                    dataBuffer.getInt(dataStart + DataStoreUtils.STORE_HEADER_POS_QUEUEID);
+                            final long queueOffset =
+                                    dataBuffer.getLong(dataStart + DataStoreUtils.STORE_HEADER_POS_QUEUE_LOGICOFF);
+                            final long timeRecv =
+                                    dataBuffer.getLong(dataStart + DataStoreUtils.STORE_HEADER_POS_RECEIVEDTIME);
+                            final int keyCode =
+                                    dataBuffer.getInt(dataStart + DataStoreUtils.STORE_HEADER_POS_KEYCODE);
+                            final int msgSize = msgLen + 4;
+                            final long msgOffset = queueOffset - queueOffset % DataStoreUtils.STORE_INDEX_HEAD_LEN;
+                            int payLoadLen = msgLen - DataStoreUtils.STORE_DATA_PREFX_LEN;
+                            int payLoadOffset = dataStart + DataStoreUtils.STORE_DATA_HEADER_LEN;
+                            if (msgToken != DataStoreUtils.STORE_DATA_TOKER_BEGIN_VALUE
+                                    || payLoadLen <= 0
+                                    || payLoadLen > DataStoreUtils.STORE_MAX_MESSAGE_STORE_LEN) {
                                 dataStart += 1;
                                 continue;
                             }
-                            final int msgSize = msgLen + 4;
-                            final long msgOffset =
-                                    curSegment.getStart() + curOffset + dataStart;
-                            final long queueOffset =
-                                    dataBuffer.getLong(dataStart + DataStoreUtils.STORE_HEADER_POS_QUEUE_LOGICOFF);
-                            final int partitionId =
-                                    dataBuffer.getInt(dataStart + DataStoreUtils.STORE_HEADER_POS_QUEUEID);
-                            final int keyCode =
-                                    dataBuffer.getInt(dataStart + DataStoreUtils.STORE_HEADER_POS_KEYCODE);
-                            final long timeRecv =
-                                    dataBuffer.getLong(dataStart + DataStoreUtils.STORE_HEADER_POS_RECEIVEDTIME);
-                            dataStart += msgSize;
+                            if (payLoadLen > (dataRealLimit
+                                    - dataStart - DataStoreUtils.STORE_DATA_HEADER_LEN)) {
+                                break;
+                            }
+                            // check message crc
+                            final byte[] payLoadData = new byte[payLoadLen];
+                            System.arraycopy(dataBuffer.array(), payLoadOffset,
+                                    payLoadData, 0, payLoadLen);
+                            if (checkSum != CheckSum.crc32(payLoadData)) {
+                                dataStart += 1;
+                                continue;
+                            }
+                            // build index item
                             indexBuffer.clear();
                             indexBuffer.putInt(partitionId);
-                            indexBuffer.putLong(msgOffset);
+                            indexBuffer.putLong(curSegment.getStart()
+                                    + curOffset + dataStart);
                             indexBuffer.putInt(msgSize);
                             indexBuffer.putInt(keyCode);
                             indexBuffer.putLong(timeRecv);
                             indexBuffer.flip();
+                            dataStart += msgSize;
                             if (curPartSeg == null) {
-                                if (gQueueOffset < 0) {
-                                    gQueueOffset = queueOffset;
-                                }
-                                File newFile =
-                                        new File(this.indexDir,
-                                                DataStoreUtils.nameFromOffset(gQueueOffset, INDEX_SUFFIX));
+                                File newFile = new File(this.indexDir,
+                                        DataStoreUtils.nameFromOffset(msgOffset, DataStoreUtils.INDEX_FILE_SUFFIX));
                                 curPartSeg =
-                                        new FileSegment(queueOffset, newFile, SegmentType.INDEX);
+                                        new FileSegment(msgOffset, newFile, SegmentType.INDEX);
                             }
+                            // append index message
                             curPartSeg.append(indexBuffer, timeRecv, timeRecv);
-                            gQueueOffset += DataStoreUtils.STORE_INDEX_HEAD_LEN;
                             if (curPartSeg.getCachedSize() >= maxIndexSegmentSize) {
                                 curPartSeg.flush(true);
                                 curPartSeg.close();
@@ -415,13 +437,10 @@ public class StoreRepairAdmin {
                 if (curPartSeg != null) {
                     curPartSeg.flush(true);
                     curPartSeg.close();
-                    curPartSeg = null;
                 }
             } catch (Throwable e2) {
                 logger.error("Close Index file error ", e2);
             }
         }
-
     }
-
 }

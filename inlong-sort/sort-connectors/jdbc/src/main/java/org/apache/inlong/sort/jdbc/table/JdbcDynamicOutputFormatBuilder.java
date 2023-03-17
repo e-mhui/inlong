@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -38,7 +37,12 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
+import org.apache.inlong.sort.base.dirty.DirtySinkHelper;
+import org.apache.inlong.sort.base.sink.SchemaUpdateExceptionPolicy;
+import org.apache.inlong.sort.base.dirty.DirtyOptions;
+import org.apache.inlong.sort.base.dirty.sink.DirtySink;
 import org.apache.inlong.sort.jdbc.internal.JdbcBatchingOutputFormat;
+import org.apache.inlong.sort.jdbc.internal.JdbcMultiBatchingOutputFormat;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -64,8 +68,15 @@ public class JdbcDynamicOutputFormatBuilder implements Serializable {
     private boolean appendMode;
     private TypeInformation<RowData> rowDataTypeInformation;
     private DataType[] fieldDataTypes;
-    private String inLongMetric;
+    private String inlongMetric;
     private String auditHostAndPorts;
+    private String sinkMultipleFormat;
+    private String databasePattern;
+    private String tablePattern;
+    private String schemaPattern;
+    private SchemaUpdateExceptionPolicy schemaUpdateExceptionPolicy;
+    private DirtyOptions dirtyOptions;
+    private DirtySink<Object> dirtySink;
 
     public JdbcDynamicOutputFormatBuilder() {
 
@@ -92,7 +103,6 @@ public class JdbcDynamicOutputFormatBuilder implements Serializable {
                 ctx.getExecutionConfig().isObjectReuseEnabled()
                         ? typeSerializer::copy
                         : Function.identity();
-
         return new TableBufferReducedStatementExecutor(
                 createUpsertRowExecutor(
                         dialect,
@@ -134,15 +144,14 @@ public class JdbcDynamicOutputFormatBuilder implements Serializable {
         return dialect.getUpsertStatement(tableName, fieldNames, pkNames)
                 .map(sql -> createSimpleRowExecutor(dialect, fieldNames, fieldTypes, sql))
                 .orElseGet(
-                        () ->
-                                createInsertOrUpdateExecutor(
-                                        dialect,
-                                        tableName,
-                                        fieldNames,
-                                        fieldTypes,
-                                        pkFields,
-                                        pkNames,
-                                        pkTypes));
+                        () -> createInsertOrUpdateExecutor(
+                                dialect,
+                                tableName,
+                                fieldNames,
+                                fieldTypes,
+                                pkFields,
+                                pkNames,
+                                pkTypes));
     }
 
     private static JdbcBatchStatementExecutor<RowData> createDeleteExecutor(
@@ -155,8 +164,7 @@ public class JdbcDynamicOutputFormatBuilder implements Serializable {
             JdbcDialect dialect, String[] fieldNames, LogicalType[] fieldTypes, final String sql) {
         final JdbcRowConverter rowConverter = dialect.getRowConverter(RowType.of(fieldTypes));
         return new TableSimpleStatementExecutor(
-                connection ->
-                        FieldNamedPreparedStatement.prepareStatement(connection, sql, fieldNames),
+                connection -> FieldNamedPreparedStatement.prepareStatement(connection, sql, fieldNames),
                 rowConverter);
     }
 
@@ -172,15 +180,12 @@ public class JdbcDynamicOutputFormatBuilder implements Serializable {
         final String insertStmt = dialect.getInsertIntoStatement(tableName, fieldNames);
         final String updateStmt = dialect.getUpdateStatement(tableName, fieldNames, pkNames);
         return new TableInsertOrUpdateStatementExecutor(
-                connection ->
-                        FieldNamedPreparedStatement.prepareStatement(
-                                connection, existStmt, pkNames),
-                connection ->
-                        FieldNamedPreparedStatement.prepareStatement(
-                                connection, insertStmt, fieldNames),
-                connection ->
-                        FieldNamedPreparedStatement.prepareStatement(
-                                connection, updateStmt, fieldNames),
+                connection -> FieldNamedPreparedStatement.prepareStatement(
+                        connection, existStmt, pkNames),
+                connection -> FieldNamedPreparedStatement.prepareStatement(
+                        connection, insertStmt, fieldNames),
+                connection -> FieldNamedPreparedStatement.prepareStatement(
+                        connection, updateStmt, fieldNames),
                 dialect.getRowConverter(RowType.of(pkTypes)),
                 dialect.getRowConverter(RowType.of(fieldTypes)),
                 dialect.getRowConverter(RowType.of(fieldTypes)),
@@ -236,13 +241,49 @@ public class JdbcDynamicOutputFormatBuilder implements Serializable {
         return this;
     }
 
-    public JdbcDynamicOutputFormatBuilder setInLongMetric(String inLongMetric) {
-        this.inLongMetric = inLongMetric;
+    public JdbcDynamicOutputFormatBuilder setInLongMetric(String inlongMetric) {
+        this.inlongMetric = inlongMetric;
         return this;
     }
 
     public JdbcDynamicOutputFormatBuilder setAuditHostAndPorts(String auditHostAndPorts) {
         this.auditHostAndPorts = auditHostAndPorts;
+        return this;
+    }
+
+    public JdbcDynamicOutputFormatBuilder setSinkMultipleFormat(String sinkMultipleFormat) {
+        this.sinkMultipleFormat = sinkMultipleFormat;
+        return this;
+    }
+
+    public JdbcDynamicOutputFormatBuilder setDatabasePattern(String databasePattern) {
+        this.databasePattern = databasePattern;
+        return this;
+    }
+
+    public JdbcDynamicOutputFormatBuilder setTablePattern(String tablePattern) {
+        this.tablePattern = tablePattern;
+        return this;
+    }
+
+    public JdbcDynamicOutputFormatBuilder setSchemaPattern(String schemaPattern) {
+        this.schemaPattern = schemaPattern;
+        return this;
+    }
+
+    public JdbcDynamicOutputFormatBuilder setSchemaUpdatePolicy(
+            SchemaUpdateExceptionPolicy schemaUpdateExceptionPolicy) {
+        this.schemaUpdateExceptionPolicy = schemaUpdateExceptionPolicy;
+        return this;
+    }
+
+    public JdbcDynamicOutputFormatBuilder setDirtyOptions(DirtyOptions dirtyOptions) {
+        this.dirtyOptions = dirtyOptions;
+        return this;
+    }
+
+    public JdbcDynamicOutputFormatBuilder setDirtySink(DirtySink<Object> dirtySink) {
+        this.dirtySink = dirtySink;
         return this;
     }
 
@@ -260,12 +301,13 @@ public class JdbcDynamicOutputFormatBuilder implements Serializable {
             return new JdbcBatchingOutputFormat<>(
                     new SimpleJdbcConnectionProvider(jdbcOptions),
                     executionOptions,
-                    ctx ->
-                            createBufferReduceExecutor(
-                                    dmlOptions, ctx, rowDataTypeInformation, logicalTypes),
+                    ctx -> createBufferReduceExecutor(
+                            dmlOptions, ctx, rowDataTypeInformation, logicalTypes),
                     JdbcBatchingOutputFormat.RecordExtractor.identity(),
-                    inLongMetric,
-                    auditHostAndPorts);
+                    inlongMetric,
+                    auditHostAndPorts,
+                    dirtyOptions,
+                    dirtySink);
         } else {
             // append only query
             final String sql =
@@ -276,17 +318,39 @@ public class JdbcDynamicOutputFormatBuilder implements Serializable {
             return new JdbcBatchingOutputFormat<>(
                     new SimpleJdbcConnectionProvider(jdbcOptions),
                     executionOptions,
-                    ctx ->
-                            createSimpleBufferedExecutor(
-                                    ctx,
-                                    dmlOptions.getDialect(),
-                                    dmlOptions.getFieldNames(),
-                                    logicalTypes,
-                                    sql,
-                                    rowDataTypeInformation),
+                    ctx -> createSimpleBufferedExecutor(
+                            ctx,
+                            dmlOptions.getDialect(),
+                            dmlOptions.getFieldNames(),
+                            logicalTypes,
+                            sql,
+                            rowDataTypeInformation),
                     JdbcBatchingOutputFormat.RecordExtractor.identity(),
-                    inLongMetric,
-                    auditHostAndPorts);
+                    inlongMetric,
+                    auditHostAndPorts,
+                    dirtyOptions,
+                    dirtySink);
         }
+    }
+
+    public JdbcMultiBatchingOutputFormat<RowData, ?, ?> buildMulti() {
+        checkNotNull(jdbcOptions, "jdbc options can not be null");
+        checkNotNull(dmlOptions, "jdbc dml options can not be null");
+        checkNotNull(executionOptions, "jdbc execution options can not be null");
+        final DirtySinkHelper<Object> dirtySinkHelper = new DirtySinkHelper<>(dirtyOptions, dirtySink);
+        return new JdbcMultiBatchingOutputFormat<>(
+                new SimpleJdbcConnectionProvider(jdbcOptions),
+                executionOptions,
+                dmlOptions,
+                appendMode,
+                jdbcOptions,
+                sinkMultipleFormat,
+                databasePattern,
+                tablePattern,
+                schemaPattern,
+                inlongMetric,
+                auditHostAndPorts,
+                schemaUpdateExceptionPolicy,
+                dirtySinkHelper);
     }
 }

@@ -22,11 +22,13 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import com.google.common.collect.Maps;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.enums.ProcessName;
 import org.apache.inlong.manager.common.enums.TaskStatus;
 import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.dao.entity.WorkflowProcessEntity;
 import org.apache.inlong.manager.dao.entity.WorkflowTaskEntity;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.workflow.EventLogRequest;
 import org.apache.inlong.manager.pojo.workflow.ListenerExecuteLog;
 import org.apache.inlong.manager.pojo.workflow.ProcessCountRequest;
@@ -131,7 +133,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     }
 
     @Override
-    public PageInfo<ProcessResponse> listProcess(ProcessRequest query) {
+    public PageResult<ProcessResponse> listProcess(ProcessRequest query) {
         PageHelper.startPage(query.getPageNum(), query.getPageSize());
         Page<WorkflowProcessEntity> result = (Page<WorkflowProcessEntity>) queryService.listProcessEntity(query);
         PageInfo<ProcessResponse> pageInfo = result.toPageInfo(entity -> {
@@ -142,7 +144,8 @@ public class WorkflowServiceImpl implements WorkflowService {
             return response;
         });
 
-        pageInfo.setTotal(result.getTotal());
+        PageResult<ProcessResponse> pageResult = new PageResult<>(pageInfo.getList(),
+                pageInfo.getTotal(), pageInfo.getPageNum(), pageInfo.getPageSize());
 
         if (query.getIncludeCurrentTask()) {
             TaskRequest taskQuery = TaskRequest.builder()
@@ -150,20 +153,20 @@ public class WorkflowServiceImpl implements WorkflowService {
                     .statusSet(Collections.singleton(TaskStatus.PENDING))
                     .build();
             PageHelper.startPage(0, 100);
-            pageInfo.getList().forEach(this.addCurrentTask(taskQuery));
+            pageResult.getList().forEach(this.addCurrentTask(taskQuery));
         }
-        return pageInfo;
+        return pageResult;
     }
 
     @Override
-    public PageInfo<TaskResponse> listTask(TaskRequest query) {
+    public PageResult<TaskResponse> listTask(TaskRequest query) {
         PageHelper.startPage(query.getPageNum(), query.getPageSize());
         Page<WorkflowTaskEntity> result = (Page<WorkflowTaskEntity>) queryService.listTaskEntity(query);
+
         PageInfo<TaskResponse> pageInfo = result.toPageInfo(WorkflowUtils::getTaskResponse);
         addShowInListForEachTask(pageInfo.getList());
-        pageInfo.setTotal(result.getTotal());
 
-        return pageInfo;
+        return new PageResult<>(pageInfo.getList(), pageInfo.getTotal(), pageInfo.getPageNum(), pageInfo.getPageSize());
     }
 
     @Override
@@ -177,16 +180,17 @@ public class WorkflowServiceImpl implements WorkflowService {
     }
 
     @Override
-    public PageInfo<WorkflowExecuteLog> listTaskLogs(TaskLogRequest query) {
-        Preconditions.checkNotNull(query, "task execute log query params cannot be null");
+    public PageResult<WorkflowExecuteLog> listTaskLogs(TaskLogRequest query) {
+        Preconditions.expectNotNull(query, "task execute log query params cannot be null");
 
         String groupId = query.getInlongGroupId();
         List<String> processNameList = query.getProcessNames();
-        Preconditions.checkNotEmpty(groupId, "inlong group id cannot be null");
-        Preconditions.checkNotEmpty(processNameList, "process name list cannot be null");
+        Preconditions.expectNotBlank(groupId, ErrorCodeEnum.GROUP_ID_IS_EMPTY);
+        Preconditions.expectNotEmpty(processNameList, "process name list cannot be null");
 
         ProcessRequest processRequest = new ProcessRequest();
         processRequest.setInlongGroupId(groupId);
+        processRequest.setInlongStreamId(query.getInlongStreamId());
         processRequest.setNameList(processNameList);
         processRequest.setHidden(1);
 
@@ -201,8 +205,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                 .status(inst.getStatus())
                 .startTime(inst.getStartTime())
                 .endTime(inst.getEndTime())
-                .build()
-        );
+                .build());
 
         // According to the process execution log, query the execution log of each task in the process
         for (WorkflowExecuteLog executeLog : pageInfo.getList()) {
@@ -229,8 +232,9 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
 
         LOGGER.info("success to page list task execute logs for " + query);
-        pageInfo.setTotal(entityPage.getTotal());
-        return pageInfo;
+
+        return new PageResult<>(pageInfo.getList(), pageInfo.getTotal(), pageInfo.getPageNum(),
+                pageInfo.getPageSize());
     }
 
     private Consumer<ProcessResponse> addCurrentTask(TaskRequest query) {

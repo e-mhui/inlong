@@ -21,6 +21,7 @@ import React from 'react';
 import { Button } from 'antd';
 import dayjs from 'dayjs';
 import i18n from '@/i18n';
+import { sinks } from '@/metas/sinks';
 
 export const timeStaticsDimList = [
   {
@@ -37,7 +38,7 @@ export const timeStaticsDimList = [
   },
 ];
 
-export const auditList = ['Agent', 'DataProxy', 'Sort'].reduce((acc, item, index) => {
+const auditList = ['Agent', 'DataProxy', 'Sort'].reduce((acc, item, index) => {
   return acc.concat([
     {
       label: `${item} ${i18n.t('pages.GroupDetail.Audit.Receive')}`,
@@ -58,11 +59,19 @@ const auditMap = auditList.reduce(
   {},
 );
 
+function getAuditLabel(auditId: number, nodeType?: string) {
+  const id = +auditId;
+  const item = id >= 9 ? auditMap[id % 2 ? 7 : 8] : auditMap[id];
+  const label = item?.label || id;
+  const sinkLabel = sinks.find(c => c.value === nodeType)?.label;
+  return nodeType ? `${label}(${sinkLabel})` : label;
+}
+
 export const toChartData = (source, sourceDataMap) => {
   const xAxisData = Object.keys(sourceDataMap);
   return {
     legend: {
-      data: source.map(item => auditMap[item.auditId]?.label),
+      data: source.map(item => getAuditLabel(item.auditId, item.nodeType)),
     },
     tooltip: {
       trigger: 'axis',
@@ -75,7 +84,7 @@ export const toChartData = (source, sourceDataMap) => {
       type: 'value',
     },
     series: source.map(item => ({
-      name: auditMap[item.auditId]?.label,
+      name: getAuditLabel(item.auditId, item.nodeType),
       type: 'line',
       data: xAxisData.map(logTs => sourceDataMap[logTs]?.[item.auditId] || 0),
     })),
@@ -142,18 +151,6 @@ export const getFormContent = (inlongGroupId, initialValues, onSearch, onDataStr
     },
   },
   {
-    type: 'select',
-    label: i18n.t('pages.GroupDetail.Audit.AuditIds'),
-    name: 'auditIds',
-    initialValue: initialValues.auditIds,
-    props: {
-      mode: 'multiple',
-      dropdownMatchSelectWidth: false,
-      options: auditList,
-    },
-    rules: [{ required: true }],
-  },
-  {
     type: (
       <Button type="primary" onClick={onSearch}>
         {i18n.t('pages.GroupDetail.Audit.Search')}
@@ -164,7 +161,7 @@ export const getFormContent = (inlongGroupId, initialValues, onSearch, onDataStr
 
 export const getTableColumns = source => {
   const data = source.map(item => ({
-    title: auditMap[item.auditId]?.label || item.auditId,
+    title: getAuditLabel(item.auditId, item.nodeType),
     dataIndex: item.auditId,
     render: text => text || 0,
   }));

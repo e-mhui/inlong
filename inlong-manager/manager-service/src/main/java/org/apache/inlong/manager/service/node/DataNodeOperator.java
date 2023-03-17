@@ -21,6 +21,8 @@ import org.apache.inlong.manager.dao.entity.DataNodeEntity;
 import org.apache.inlong.manager.pojo.node.DataNodeInfo;
 import org.apache.inlong.manager.pojo.node.DataNodeRequest;
 
+import java.util.Map;
+
 /**
  * Interface of the data node operator.
  */
@@ -62,4 +64,28 @@ public interface DataNodeOperator {
      * @param operator name of operator
      */
     void updateOpt(DataNodeRequest request, String operator);
+
+    /**
+     * Parse data node info to sort-standalone sink params
+     * @param info DataNodeInfo
+     * @return Sink params
+     */
+    Map<String, String> parse2SinkParams(DataNodeInfo info);
+
+    /**
+     * Test connection
+     * @param request request of the data node
+     * @return Whether the connection is successful
+     */
+    Boolean testConnection(DataNodeRequest request);
+
+    /**
+     * Update related stream source.
+     *
+     * @param request data node request
+     * @param entity data node entity
+     * @param operator operator
+     */
+    void updateRelatedStreamSource(DataNodeRequest request, DataNodeEntity entity, String operator);
+
 }

@@ -43,7 +43,9 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -59,8 +61,7 @@ public class DorisExtractNodeToMySqlLoadNodeTest extends AbstractTestBase {
                 new FieldInfo("name", new StringFormatInfo()),
                 new FieldInfo("age", new IntFormatInfo()),
                 new FieldInfo("price", new DecimalFormatInfo()),
-                new FieldInfo("sale", new DoubleFormatInfo())
-        );
+                new FieldInfo("sale", new DoubleFormatInfo()));
         return new DorisExtractNode("1", "doris_input", fields,
                 null, null, "localhost:8030", "root",
                 "000000", "test.test1");
@@ -73,12 +74,11 @@ public class DorisExtractNodeToMySqlLoadNodeTest extends AbstractTestBase {
                 new FieldInfo("name", new StringFormatInfo()),
                 new FieldInfo("age", new IntFormatInfo()),
                 new FieldInfo("price", new DecimalFormatInfo()),
-                new FieldInfo("sale", new DoubleFormatInfo())
-        );
+                new FieldInfo("sale", new DoubleFormatInfo()));
 
         List<FieldRelation> fieldRelations = Arrays
                 .asList(new FieldRelation(new FieldInfo("dt", new StringFormatInfo()),
-                                new FieldInfo("dt", new StringFormatInfo())),
+                        new FieldInfo("dt", new StringFormatInfo())),
                         new FieldRelation(new FieldInfo("id", new IntFormatInfo()),
                                 new FieldInfo("id", new IntFormatInfo())),
                         new FieldRelation(new FieldInfo("name", new StringFormatInfo()),
@@ -88,13 +88,18 @@ public class DorisExtractNodeToMySqlLoadNodeTest extends AbstractTestBase {
                         new FieldRelation(new FieldInfo("price", new DecimalFormatInfo()),
                                 new FieldInfo("price", new DecimalFormatInfo())),
                         new FieldRelation(new FieldInfo("sale", new DoubleFormatInfo()),
-                                new FieldInfo("sale", new DoubleFormatInfo()))
-                );
+                                new FieldInfo("sale", new DoubleFormatInfo())));
 
         List<FilterFunction> filters = new ArrayList<>();
-
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("dirty.side-output.connector", "log");
+        properties.put("dirty.ignore", "true");
+        properties.put("dirty.side-output.enable", "true");
+        properties.put("dirty.side-output.format", "csv");
+        properties.put("dirty.side-output.labels",
+                "SYSTEM_TIME=${SYSTEM_TIME}&DIRTY_TYPE=${DIRTY_TYPE}&database=inlong&table=inlong_sqlserver");
         return new MySqlLoadNode("2", "mysql_output", fields, fieldRelations, filters,
-                null, null, null, "jdbc:mysql://localhost:3306/inlong",
+                null, null, properties, "jdbc:mysql://localhost:3306/inlong",
                 "inlong", "inlong", "table_output", null);
     }
 

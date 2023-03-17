@@ -25,7 +25,11 @@ public class DataNodeType {
     public static final String HIVE = "HIVE";
     public static final String KAFKA = "KAFKA";
     public static final String ICEBERG = "ICEBERG";
+    public static final String HUDI = "HUDI";
     public static final String CLICKHOUSE = "CLICKHOUSE";
     public static final String ELASTICSEARCH = "ELASTICSEARCH";
+    public static final String MYSQL = "MYSQL";
+    public static final String STARROCKS = "STARROCKS";
+    public static final String REDIS = "REDIS";
 
 }

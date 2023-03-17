@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,16 +18,12 @@
 package org.apache.inlong.sort.elasticsearch7;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.streaming.connectors.elasticsearch.RequestIndexer;
-
+import org.apache.inlong.sort.elasticsearch.RequestIndexer;
 import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.bulk.BulkProcessor;
-import org.elasticsearch.action.delete.DeleteRequest;
-import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.update.UpdateRequest;
 
 import java.util.concurrent.atomic.AtomicLong;
-
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -38,7 +33,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * <p>Note: This class is binary compatible to Elasticsearch 7.
  */
 @Internal
-class Elasticsearch7BulkProcessorIndexer implements RequestIndexer {
+class Elasticsearch7BulkProcessorIndexer implements RequestIndexer<DocWriteRequest<?>> {
 
     private final BulkProcessor bulkProcessor;
     private final boolean flushOnCheckpoint;
@@ -54,33 +49,10 @@ class Elasticsearch7BulkProcessorIndexer implements RequestIndexer {
     }
 
     @Override
-    public void add(DeleteRequest... deleteRequests) {
-        for (DeleteRequest deleteRequest : deleteRequests) {
-            if (flushOnCheckpoint) {
-                numPendingRequestsRef.getAndIncrement();
-            }
-            this.bulkProcessor.add(deleteRequest);
+    public void add(DocWriteRequest<?> request) {
+        if (flushOnCheckpoint) {
+            numPendingRequestsRef.getAndIncrement();
         }
-    }
-
-    @Override
-    public void add(IndexRequest... indexRequests) {
-        for (IndexRequest indexRequest : indexRequests) {
-            if (flushOnCheckpoint) {
-                numPendingRequestsRef.getAndIncrement();
-            }
-            this.bulkProcessor.add(indexRequest);
-        }
-    }
-
-    @Override
-    public void add(UpdateRequest... updateRequests) {
-        for (UpdateRequest updateRequest : updateRequests) {
-            if (flushOnCheckpoint) {
-                numPendingRequestsRef.getAndIncrement();
-            }
-            this.bulkProcessor.add(updateRequest);
-        }
+        this.bulkProcessor.add(request);
     }
 }
-

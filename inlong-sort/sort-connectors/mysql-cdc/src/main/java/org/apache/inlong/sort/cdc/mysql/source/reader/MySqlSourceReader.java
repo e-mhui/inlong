@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +20,7 @@ package org.apache.inlong.sort.cdc.mysql.source.reader;
 import io.debezium.connector.mysql.MySqlConnection;
 import io.debezium.relational.TableId;
 import io.debezium.relational.history.TableChanges;
+import java.util.Map.Entry;
 import org.apache.flink.api.connector.source.SourceEvent;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.source.reader.RecordEmitter;
@@ -29,6 +29,7 @@ import org.apache.flink.connector.base.source.reader.SingleThreadMultiplexSource
 import org.apache.flink.connector.base.source.reader.fetcher.SingleThreadFetcherManager;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.inlong.sort.base.metric.sub.SourceTableMetricData;
 import org.apache.inlong.sort.cdc.mysql.debezium.DebeziumUtils;
 import org.apache.inlong.sort.cdc.mysql.source.config.MySqlSourceConfig;
 import org.apache.inlong.sort.cdc.mysql.source.events.BinlogSplitMetaEvent;
@@ -41,10 +42,13 @@ import org.apache.inlong.sort.cdc.mysql.source.events.LatestFinishedSplitsSizeRe
 import org.apache.inlong.sort.cdc.mysql.source.events.SuspendBinlogReaderAckEvent;
 import org.apache.inlong.sort.cdc.mysql.source.events.SuspendBinlogReaderEvent;
 import org.apache.inlong.sort.cdc.mysql.source.events.WakeupReaderEvent;
+import org.apache.inlong.sort.cdc.mysql.source.metrics.MySqlSourceReaderMetrics;
 import org.apache.inlong.sort.cdc.mysql.source.offset.BinlogOffset;
 import org.apache.inlong.sort.cdc.mysql.source.split.FinishedSnapshotSplitInfo;
 import org.apache.inlong.sort.cdc.mysql.source.split.MySqlBinlogSplit;
 import org.apache.inlong.sort.cdc.mysql.source.split.MySqlBinlogSplitState;
+import org.apache.inlong.sort.cdc.mysql.source.split.MySqlMetricSplit;
+import org.apache.inlong.sort.cdc.mysql.source.split.MySqlMetricSplit.MySqlTableMetric;
 import org.apache.inlong.sort.cdc.mysql.source.split.MySqlSnapshotSplit;
 import org.apache.inlong.sort.cdc.mysql.source.split.MySqlSnapshotSplitState;
 import org.apache.inlong.sort.cdc.mysql.source.split.MySqlSplit;
@@ -73,8 +77,8 @@ import static org.apache.inlong.sort.cdc.mysql.source.utils.ChunkUtils.getNextMe
  * The source reader for MySQL source splits.
  */
 public class MySqlSourceReader<T>
-        extends SingleThreadMultiplexSourceReaderBase<
-        SourceRecord, T, MySqlSplit, MySqlSplitState> {
+        extends
+            SingleThreadMultiplexSourceReaderBase<SourceRecord, T, MySqlSplit, MySqlSplitState> {
 
     private static final Logger LOG = LoggerFactory.getLogger(MySqlSourceReader.class);
 
@@ -84,6 +88,7 @@ public class MySqlSourceReader<T>
     private final int subtaskId;
     private final MySqlSourceReaderContext mySqlSourceReaderContext;
     private MySqlBinlogSplit suspendedBinlogSplit;
+    private MySqlSourceReaderMetrics sourceReaderMetrics;
 
     public MySqlSourceReader(
             FutureCompletingBlockingQueue<RecordsWithSplitIds<SourceRecord>> elementQueue,
@@ -91,7 +96,8 @@ public class MySqlSourceReader<T>
             RecordEmitter<SourceRecord, T, MySqlSplitState> recordEmitter,
             Configuration config,
             MySqlSourceReaderContext context,
-            MySqlSourceConfig sourceConfig) {
+            MySqlSourceConfig sourceConfig,
+            MySqlSourceReaderMetrics sourceReaderMetrics) {
         super(
                 elementQueue,
                 new SingleThreadFetcherManager<>(elementQueue, splitReaderSupplier::get),
@@ -104,6 +110,7 @@ public class MySqlSourceReader<T>
         this.subtaskId = context.getSourceReaderContext().getIndexOfSubtask();
         this.mySqlSourceReaderContext = context;
         this.suspendedBinlogSplit = null;
+        this.sourceReaderMetrics = sourceReaderMetrics;
     }
 
     @Override
@@ -142,6 +149,20 @@ public class MySqlSourceReader<T>
         if (suspendedBinlogSplit != null) {
             unfinishedSplits.add(suspendedBinlogSplit);
         }
+        SourceTableMetricData sourceMetricData = sourceReaderMetrics.getSourceMetricData();
+        LOG.info("inlong-metric-states snapshot sourceMetricData:{}", sourceMetricData);
+        if (sourceMetricData != null) {
+            long countNumBytesIn = sourceMetricData.getNumBytesIn().getCount();
+            long countNumRecordsIn = sourceMetricData.getNumRecordsIn().getCount();
+            Map<String, Long> readPhaseMetricMap = sourceMetricData.getReadPhaseMetricMap().entrySet().stream().collect(
+                    Collectors.toMap(v -> v.getKey().getPhase(), e -> e.getValue().getReadPhase().getCount()));
+            Map<String, MySqlTableMetric> tableMetricMap = sourceMetricData.getSubSourceMetricMap().entrySet().stream()
+                    .collect(Collectors.toMap(Entry::getKey,
+                            e -> new MySqlTableMetric(e.getValue().getNumRecordsIn().getCount(),
+                                    e.getValue().getNumBytesIn().getCount())));
+            unfinishedSplits
+                    .add(new MySqlMetricSplit(countNumBytesIn, countNumRecordsIn, readPhaseMetricMap, tableMetricMap));
+        }
         return unfinishedSplits;
     }
 
@@ -171,6 +192,16 @@ public class MySqlSourceReader<T>
         List<MySqlSplit> unfinishedSplits = new ArrayList<>();
         for (MySqlSplit split : splits) {
             LOG.info("Add Split: " + split);
+            if (split.isMetricSplit()) {
+                MySqlMetricSplit mysqlMetricSplit = (MySqlMetricSplit) split;
+                LOG.info("inlong-metric-states restore metricSplit:{}", mysqlMetricSplit);
+                sourceReaderMetrics.initMetrics(mysqlMetricSplit.getNumRecordsIn(),
+                        mysqlMetricSplit.getNumBytesIn(), mysqlMetricSplit.getReadPhaseMetricMap(),
+                        mysqlMetricSplit.getTableMetricMap());
+                LOG.info("inlong-metric-states restore sourceReaderMetrics:{}",
+                        sourceReaderMetrics.getSourceMetricData());
+                continue;
+            }
             if (split.isSnapshotSplit()) {
                 MySqlSnapshotSplit snapshotSplit = split.asSnapshotSplit();
                 if (snapshotSplit.isSnapshotReadFinished()) {
@@ -206,7 +237,7 @@ public class MySqlSourceReader<T>
         final String splitId = split.splitId();
         if (split.getTableSchemas().isEmpty()) {
             try (MySqlConnection jdbc =
-                         DebeziumUtils.createMySqlConnection(sourceConfig.getDbzConfiguration())) {
+                    DebeziumUtils.createMySqlConnection(sourceConfig.getDbzConfiguration())) {
                 Map<TableId, TableChanges.TableChange> tableSchemas =
                         TableDiscoveryUtils.discoverCapturedTableSchemas(sourceConfig, jdbc);
                 LOG.info("The table schema discovery for binlog split {} success", splitId);

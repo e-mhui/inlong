@@ -18,23 +18,26 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Modal, message } from 'antd';
+import { Modal, message, Button } from 'antd';
 import { ModalProps } from 'antd/es/modal';
 import FormGenerator, { useForm } from '@/components/FormGenerator';
 import { useRequest, useUpdateEffect } from '@/hooks';
 import request from '@/utils/request';
-import { Clusters } from '@/metas/clusters';
+import { useDefaultMeta, useLoadMeta, ClusterMetaType } from '@/metas';
 import i18n from '@/i18n';
 
 export interface Props extends ModalProps {
   // Require when edit
   id?: string;
+  defaultType?: string;
 }
 
-const Comp: React.FC<Props> = ({ id, ...modalProps }) => {
+const Comp: React.FC<Props> = ({ id, defaultType, ...modalProps }) => {
   const [form] = useForm();
 
-  const [type, setType] = useState(Clusters[0].value);
+  const { defaultValue } = useDefaultMeta('cluster');
+
+  const [type, setType] = useState(defaultValue);
 
   const { data: savedData, run: getData } = useRequest(
     id => ({
@@ -75,26 +78,55 @@ const Comp: React.FC<Props> = ({ id, ...modalProps }) => {
     message.success(i18n.t('basic.OperatingSuccess'));
   };
 
+  const testConnection = async () => {
+    const values = await form.validateFields();
+    const submitData = {
+      ...values,
+      inCharges: values.inCharges?.join(','),
+      clusterTags: values.clusterTags?.join(','),
+    };
+    await request({
+      url: '/cluster/testConnection',
+      method: 'POST',
+      data: submitData,
+    });
+    message.success(i18n.t('basic.ConnectionSuccess'));
+  };
+
   useUpdateEffect(() => {
     if (modalProps.visible) {
-      // open
-      form.resetFields();
       if (id) {
         getData(id);
+      } else {
+        setType(defaultType);
+        form.setFieldsValue({ type: defaultType });
       }
+    } else {
+      form.resetFields();
     }
   }, [modalProps.visible]);
 
+  const { Entity } = useLoadMeta<ClusterMetaType>('cluster', type);
+
   const content = useMemo(() => {
-    const current = Clusters.find(item => item.value === type);
-    return current?.config;
-  }, [type]);
+    return Entity ? new Entity().renderRow() : [];
+  }, [Entity]);
 
   return (
     <Modal
       {...modalProps}
       title={id ? i18n.t('pages.Clusters.Edit') : i18n.t('pages.Clusters.Create')}
-      onOk={onOk}
+      footer={[
+        <Button key="cancel" onClick={modalProps.onCancel}>
+          {i18n.t('basic.Cancel')}
+        </Button>,
+        <Button key="save" type="primary" onClick={onOk}>
+          {i18n.t('basic.Save')}
+        </Button>,
+        <Button key="run" type="primary" onClick={testConnection}>
+          {i18n.t('pages.Clusters.TestConnection')}
+        </Button>,
+      ]}
     >
       <FormGenerator
         content={content}

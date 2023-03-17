@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -27,6 +27,7 @@ import org.apache.inlong.tubemq.corebase.cluster.Partition;
 import org.apache.inlong.tubemq.corebase.cluster.SubscribeInfo;
 import org.apache.inlong.tubemq.corebase.cluster.TopicInfo;
 import org.apache.inlong.tubemq.corebase.utils.DataConverterUtil;
+import org.apache.inlong.tubemq.corebase.utils.Tuple2;
 import org.junit.Test;
 
 public class DataConverterUtilTest {
@@ -43,7 +44,8 @@ public class DataConverterUtilTest {
         BrokerInfo broker = new BrokerInfo(0, "localhost", 1200);
         List<String> strInfoList = new ArrayList<>();
         strInfoList.add("0:localhost:1200");
-        Map<Integer, BrokerInfo> brokerMap = DataConverterUtil.convertBrokerInfo(strInfoList);
+        Map<Integer, BrokerInfo> brokerMap =
+                DataConverterUtil.convertBrokerInfo(strInfoList, false);
         assertEquals("broker should be equal", broker, brokerMap.get(broker.getBrokerId()));
 
         // partition convert
@@ -65,8 +67,9 @@ public class DataConverterUtilTest {
         strInfoList.clear();
         // topic#brokerId:partitionNum:topicStoreNum
         strInfoList.add("tube#0:10:5");
-        List<TopicInfo> topicList = DataConverterUtil.convertTopicInfo(brokerMap, strInfoList);
-        assertEquals("topic should be equal", topic, topicList.get(0));
+        Tuple2<Map<String, Integer>, List<TopicInfo>> topicConfTuple =
+                DataConverterUtil.convertTopicInfo(brokerMap, strInfoList);
+        assertEquals("topic should be equal", topic, topicConfTuple.getF1().get(0));
 
     }
 

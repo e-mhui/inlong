@@ -24,7 +24,6 @@ import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.InlongClient;
 import org.apache.inlong.manager.common.auth.DefaultAuthentication;
 import org.apache.inlong.manager.common.consts.InlongConstants;
-import org.apache.inlong.manager.common.enums.DataSeparator;
 import org.apache.inlong.manager.common.enums.FieldType;
 import org.apache.inlong.manager.common.enums.FileFormat;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
@@ -104,8 +103,6 @@ public class BaseTest {
         pulsarInfo.setInCharges(IN_CHARGES);
 
         // pulsar conf
-        pulsarInfo.setServiceUrl(PULSAR_SERVICE_URL);
-        pulsarInfo.setAdminUrl(PULSAR_ADMIN_URL);
         pulsarInfo.setTenant(TENANT);
         pulsarInfo.setMqResource(NAMESPACE);
 
@@ -140,12 +137,11 @@ public class BaseTest {
         hiveSink.setAuthentication(new DefaultAuthentication("hive", "hive"));
         hiveSink.setDataEncoding(StandardCharsets.UTF_8.toString());
         hiveSink.setFileFormat(FileFormat.TextFile.name());
-        hiveSink.setDataSeparator(DataSeparator.VERTICAL_BAR.getSeparator());
+        hiveSink.setDataSeparator("|");
         hiveSink.setDataPath("hdfs://{ip:port}/usr/hive/warehouse/{db.name}");
         hiveSink.setSinkFieldList(Lists.newArrayList(
                 new SinkField(0, FieldType.INT.toString(), "age", FieldType.INT.toString(), "age"),
-                new SinkField(1, FieldType.STRING.toString(), "name", FieldType.STRING.toString(), "name")
-        ));
+                new SinkField(1, FieldType.STRING.toString(), "name", FieldType.STRING.toString(), "name")));
 
         hiveSink.setTableName("{table.name}");
         hiveSink.setSinkName("{hive.sink.name}");
@@ -160,7 +156,7 @@ public class BaseTest {
         streamInfo.setInlongStreamId(STREAM_ID);
         streamInfo.setName(STREAM_ID);
         streamInfo.setDataEncoding(StandardCharsets.UTF_8.toString());
-        streamInfo.setDataSeparator(DataSeparator.VERTICAL_BAR.getSeparator());
+        streamInfo.setDataSeparator("|");
         // if you need strictly order for data, set to 1
         streamInfo.setSyncSend(InlongConstants.SYNC_SEND);
         streamInfo.setMqResource(TOPIC);

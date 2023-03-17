@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -64,7 +64,7 @@ import org.apache.inlong.tubemq.server.broker.msgstore.MessageStore;
 import org.apache.inlong.tubemq.server.broker.msgstore.MessageStoreManager;
 import org.apache.inlong.tubemq.server.broker.msgstore.disk.GetMessageResult;
 import org.apache.inlong.tubemq.server.broker.nodeinfo.ConsumerNodeInfo;
-import org.apache.inlong.tubemq.server.broker.offset.OffsetRecordInfo;
+import org.apache.inlong.tubemq.server.broker.offset.OffsetHistoryInfo;
 import org.apache.inlong.tubemq.server.broker.offset.OffsetService;
 import org.apache.inlong.tubemq.server.broker.stats.BrokerSrvStatsHolder;
 import org.apache.inlong.tubemq.server.broker.stats.TrafficStatsService;
@@ -72,9 +72,8 @@ import org.apache.inlong.tubemq.server.broker.stats.audit.AuditUtils;
 import org.apache.inlong.tubemq.server.common.TServerConstants;
 import org.apache.inlong.tubemq.server.common.TStatusConstants;
 import org.apache.inlong.tubemq.server.common.aaaserver.CertificateBrokerHandler;
-import org.apache.inlong.tubemq.server.common.aaaserver.CertifiedResult;
+import org.apache.inlong.tubemq.server.common.aaaserver.CertifiedInfo;
 import org.apache.inlong.tubemq.server.common.exception.HeartbeatException;
-import org.apache.inlong.tubemq.server.common.fielddef.WebFieldDef;
 import org.apache.inlong.tubemq.server.common.heartbeat.HeartbeatManager;
 import org.apache.inlong.tubemq.server.common.heartbeat.TimeoutInfo;
 import org.apache.inlong.tubemq.server.common.heartbeat.TimeoutListener;
@@ -89,11 +88,12 @@ import org.slf4j.LoggerFactory;
  * Broker service. Receive and conduct client's request, store messages, query messages, print statistics, etc.
  */
 public class BrokerServiceServer implements BrokerReadService, BrokerWriteService, Server {
+
     private static final Logger logger =
             LoggerFactory.getLogger(BrokerServiceServer.class);
     private final TubeBroker tubeBroker;
     private final BrokerConfig tubeConfig;
-    // registered consumers. format : consumer group - topic - partition id  --> consumer info
+    // registered consumers. format : consumer group - topic - partition id --> consumer info
     private final ConcurrentHashMap<String/* group:topic-partitionId */, ConsumerNodeInfo> consumerRegisterMap =
             new ConcurrentHashMap<>();
     // metadata manager.
@@ -119,7 +119,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
     private AtomicBoolean started = new AtomicBoolean(false);
 
     public BrokerServiceServer(final TubeBroker tubeBroker,
-                               final BrokerConfig tubeConfig) {
+            final BrokerConfig tubeConfig) {
         this.tubeConfig = tubeConfig;
         this.tubeBroker = tubeBroker;
         this.metadataManager = tubeBroker.getMetadataManager();
@@ -275,8 +275,9 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      */
     @Override
     public GetMessageResponseB2C getMessagesC2B(GetMessageRequestC2B request,
-                                                final String rmtAddress,
-                                                boolean overtls) throws Throwable {
+            final String rmtAddress,
+            boolean overtls) throws Throwable {
+        final long startTime = System.currentTimeMillis();
         final GetMessageResponseB2C.Builder builder =
                 GetMessageResponseB2C.newBuilder();
         builder.setSuccess(false);
@@ -293,16 +294,14 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
         ProcessResult result = new ProcessResult();
         StringBuilder strBuffer = new StringBuilder(512);
         // get and check clientId field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.CLIENTID,
-                request.getClientId(), strBuffer, result)) {
+        if (!PBParameterUtils.checkClientId(request.getClientId(), strBuffer, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
         final String clientId = (String) result.getRetData();
         // get and check groupName field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.GROUPNAME,
-                request.getGroupName(), strBuffer, result)) {
+        if (!PBParameterUtils.checkGroupName(request.getGroupName(), strBuffer, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
@@ -378,9 +377,9 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                             request.getLastPackConsumed(), request.getManualCommitOffset(),
                             clientId, this.tubeConfig.getHostName(), rmtAddrInfo, isEscFlowCtrl, strBuffer);
             if (msgResult.isSuccess) {
-                consumerNodeInfo.setLastProcInfo(System.currentTimeMillis(),
-                        msgResult.lastRdDataOffset,
-                        msgResult.totalMsgSize);
+                long endTime = System.currentTimeMillis();
+                consumerNodeInfo.setLastProcInfo(endTime,
+                        msgResult.lastRdDataOffset, msgResult.totalMsgSize);
                 getCounterGroup.add(msgResult.tmpCounters);
                 AuditUtils.addConsumeRecord(msgResult.tmpCounters);
                 builder.setEscFlowCtrl(false);
@@ -392,6 +391,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                 builder.setErrMsg("OK!");
                 builder.addAllMessages(msgResult.transferedMessageList);
                 builder.setMaxOffset(msgResult.getMaxOffset());
+                BrokerSrvStatsHolder.updGetMsgLatency(endTime - startTime);
                 return builder.build();
             } else {
                 builder.setErrCode(msgResult.getRetCode());
@@ -438,12 +438,12 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      * @throws IOException the exception during processing
      */
     private GetMessageResult getMessages(final MessageStore msgStore,
-                                         final ConsumerNodeInfo consumerNodeInfo,
-                                         final String group, final String topic,
-                                         final int partitionId, final boolean lastConsumed,
-                                         final boolean isManualCommitOffset, final String sentAddr,
-                                         final String brokerAddr, final String rmtAddrInfo,
-                                         boolean isEscFlowCtrl, final StringBuilder sb) throws IOException {
+            final ConsumerNodeInfo consumerNodeInfo,
+            final String group, final String topic,
+            final int partitionId, final boolean lastConsumed,
+            final boolean isManualCommitOffset, final String sentAddr,
+            final String brokerAddr, final String rmtAddrInfo,
+            boolean isEscFlowCtrl, final StringBuilder sb) throws IOException {
         long requestOffset =
                 offsetManager.getOffset(msgStore, group, topic,
                         partitionId, isManualCommitOffset, lastConsumed, sb);
@@ -486,7 +486,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
             sb.delete(0, sb.length());
             return new GetMessageResult(false, TErrCodeConstants.INTERNAL_SERVER_ERROR,
                     requestOffset, 0, sb.append("Get message failure, errMsg=")
-                    .append(e1.getMessage()).toString());
+                            .append(e1.getMessage()).toString());
         }
     }
 
@@ -502,9 +502,10 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      * @throws Exception       the exception during processing
      */
     public StringBuilder getMessageSnapshot(String topicName, int partitionId,
-                                            int msgCount, final Set<String> filterCondSet,
-                                            final StringBuilder sb) throws Exception {
+            int msgCount, final Set<String> filterCondSet,
+            final StringBuilder sb) throws Exception {
         MessageStore dataStore = null;
+        final long startTime = System.currentTimeMillis();
         if (!this.started.get()
                 || ServiceStatusHolder.isReadServiceStop()) {
             sb.append("{\"result\":false,\"errCode\":")
@@ -546,6 +547,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
             }
             GetMessageResult getMessageResult =
                     storeManager.getMessages(dataStore, topicName, partitionId, msgCount, filterCondSet);
+            BrokerSrvStatsHolder.updGetMsgLatency(System.currentTimeMillis() - startTime);
             if ((getMessageResult.transferedMessageList == null)
                     || (getMessageResult.transferedMessageList.isEmpty())) {
                 sb.append("{\"result\":false,\"errCode\":401,\"errMsg\":\"")
@@ -592,9 +594,10 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      */
     @Override
     public SendMessageResponseB2P sendMessageP2B(SendMessageRequestP2B request,
-                                                 final String rmtAddress,
-                                                 boolean overtls) throws Throwable {
+            final String rmtAddress,
+            boolean overtls) throws Throwable {
         ProcessResult result = new ProcessResult();
+        final long startTime = System.currentTimeMillis();
         final StringBuilder strBuffer = new StringBuilder(512);
         SendMessageResponseB2P.Builder builder = SendMessageResponseB2P.newBuilder();
         builder.setSuccess(false);
@@ -604,21 +607,18 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
             builder.setErrMsg("Write StoreService temporary unavailable!");
             return builder.build();
         }
-        CertifiedResult certResult =
-                serverAuthHandler.identityValidUserInfo(request.getAuthInfo(), true);
-        if (!certResult.result) {
-            builder.setErrCode(certResult.errCode);
-            builder.setErrMsg(certResult.errInfo);
-            return builder.build();
-        }
-        // get and check clientId field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.CLIENTID,
-                request.getClientId(), strBuffer, result)) {
+        if (!serverAuthHandler.identityValidUserInfo(request.getAuthInfo(), true, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
-        final String producerId = (String) result.getRetData();
+        final CertifiedInfo certifiedInfo = (CertifiedInfo) result.getRetData();
+        // get and check clientId field
+        if (!PBParameterUtils.checkClientId(request.getClientId(), strBuffer, result)) {
+            builder.setErrCode(result.getErrCode());
+            builder.setErrMsg(result.getErrMsg());
+            return builder.build();
+        }
         // get and check topicName and partitionId field
         final int partitionId = request.getPartitionId();
         if (!PBParameterUtils.getTopicNamePartIdInfo(true, request.getTopicName(),
@@ -658,12 +658,10 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                     .append(checkSum).toString());
             return builder.build();
         }
-        CertifiedResult authorizeResult =
-                serverAuthHandler.validProduceAuthorizeInfo(
-                        certResult.userName, topicName, msgType, rmtAddress);
-        if (!authorizeResult.result) {
-            builder.setErrCode(authorizeResult.errCode);
-            builder.setErrMsg(authorizeResult.errInfo);
+        if (!serverAuthHandler.validProduceAuthorizeInfo(
+                certifiedInfo.getUserName(), topicName, msgType, rmtAddress, result)) {
+            builder.setErrCode(result.getErrCode());
+            builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
         try {
@@ -681,7 +679,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                 AuditUtils.addProduceRecord(topicName,
                         request.getMsgType(), request.getMsgTime(), 1, dataLength);
                 builder.setSuccess(true);
-                builder.setRequireAuth(certResult.reAuth);
+                builder.setRequireAuth(certifiedInfo.isReAuth());
                 builder.setErrCode(TErrCodeConstants.SUCCESS);
                 // begin Deprecated, after 1.0, the ErrMsg set "Ok" or ""
                 builder.setErrMsg(String.valueOf(appendResult.getMsgId()));
@@ -689,6 +687,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                 builder.setMessageId(appendResult.getMsgId());
                 builder.setAppendTime(appendResult.getAppendTime());
                 builder.setAppendOffset(appendResult.getAppendIndexOffset());
+                BrokerSrvStatsHolder.updSendMsgLatency(System.currentTimeMillis() - startTime);
                 return builder.build();
             } else {
                 builder.setErrCode(TErrCodeConstants.SERVER_RECEIVE_OVERFLOW);
@@ -719,9 +718,9 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      * @param waitRetryMs  wait duration on overflow
      * @param strBuff    string buffer
      */
-    public void appendGroupOffsetInfo(Map<String, OffsetRecordInfo> groupOffsetMap,
-                                      int brokerAddrId, long storeTime, int retryCnt,
-                                      long waitRetryMs, StringBuilder strBuff) {
+    public void appendGroupOffsetInfo(Map<String, OffsetHistoryInfo> groupOffsetMap,
+            int brokerAddrId, long storeTime, int retryCnt,
+            long waitRetryMs, StringBuilder strBuff) {
         if (groupOffsetMap == null || groupOffsetMap.isEmpty()) {
             return;
         }
@@ -739,7 +738,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
         AppendResult appendResult = new AppendResult();
         // get store time
         String sendTime = DateTimeConvertUtils.ms2yyyyMMddHHmm(storeTime);
-        for (Map.Entry<String, OffsetRecordInfo> entry : groupOffsetMap.entrySet()) {
+        for (Map.Entry<String, OffsetHistoryInfo> entry : groupOffsetMap.entrySet()) {
             if (entry == null || entry.getKey() == null || entry.getValue() == null) {
                 continue;
             }
@@ -807,27 +806,26 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      */
     @Override
     public RegisterResponseB2C consumerRegisterC2B(RegisterRequestC2B request,
-                                                   final String rmtAddress,
-                                                   boolean overtls) throws Throwable {
+            final String rmtAddress,
+            boolean overtls) throws Throwable {
+        final ProcessResult result = new ProcessResult();
         RegisterResponseB2C.Builder builder = RegisterResponseB2C.newBuilder();
         builder.setSuccess(false);
         builder.setCurrOffset(-1);
-        CertifiedResult certResult = serverAuthHandler.identityValidUserInfo(request.getAuthInfo(), false);
         if (!this.started.get()) {
             builder.setErrCode(TErrCodeConstants.SERVICE_UNAVAILABLE);
             builder.setErrMsg("StoreService temporary unavailable!");
             return builder.build();
         }
-        if (!certResult.result) {
-            builder.setErrCode(certResult.errCode);
-            builder.setErrMsg(certResult.errInfo);
+        if (!serverAuthHandler.identityValidUserInfo(request.getAuthInfo(), false, result)) {
+            builder.setErrCode(result.getErrCode());
+            builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
-        ProcessResult result = new ProcessResult();
+        final CertifiedInfo certifiedInfo = (CertifiedInfo) result.getRetData();
         final StringBuilder strBuffer = new StringBuilder(512);
         // get and check clientId field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.CLIENTID,
-                request.getClientId(), strBuffer, result)) {
+        if (!PBParameterUtils.checkClientId(request.getClientId(), strBuffer, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
@@ -843,8 +841,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
         // get consumer info
         final String topicName = (String) result.getRetData();
         // get and check groupName field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.GROUPNAME,
-                request.getGroupName(), strBuffer, result)) {
+        if (!PBParameterUtils.checkGroupName(request.getGroupName(), strBuffer, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
@@ -859,12 +856,10 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                 }
             }
         }
-        CertifiedResult authorizeResult =
-                serverAuthHandler.validConsumeAuthorizeInfo(certResult.userName,
-                        groupName, topicName, filterCondSet, isRegister, rmtAddress);
-        if (!authorizeResult.result) {
-            builder.setErrCode(authorizeResult.errCode);
-            builder.setErrMsg(authorizeResult.errInfo);
+        if (!serverAuthHandler.validConsumeAuthorizeInfo(certifiedInfo.getUserName(),
+                groupName, topicName, filterCondSet, isRegister, rmtAddress, result)) {
+            builder.setErrCode(result.getErrCode());
+            builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
         Integer lid = null;
@@ -923,11 +918,11 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      * @return             the response
      */
     private RegisterResponseB2C inProcessConsumerRegister(String clientId, String groupName,
-                                                          String topicName, String partStr,
-                                                          Set<String> filterCondSet, String msgRcvFrom,
-                                                          boolean overtls, RegisterRequestC2B request,
-                                                          RegisterResponseB2C.Builder builder,
-                                                          StringBuilder strBuffer) {
+            String topicName, String partStr,
+            Set<String> filterCondSet, String msgRcvFrom,
+            boolean overtls, RegisterRequestC2B request,
+            RegisterResponseB2C.Builder builder,
+            StringBuilder strBuffer) {
         String consumerId = null;
         ConsumerNodeInfo consumerNodeInfo = consumerRegisterMap.get(partStr);
         if (consumerNodeInfo != null) {
@@ -938,13 +933,14 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
             long reqSessionTime = request.hasSessionTime() ? request.getSessionTime() : -1;
             String reqSessionKey = request.hasSessionKey() ? request.getSessionKey() : null;
             int reqQryPriorityId = request.hasQryPriorityId()
-                    ? request.getQryPriorityId() : TBaseConstants.META_VALUE_UNDEFINED;
+                    ? request.getQryPriorityId()
+                    : TBaseConstants.META_VALUE_UNDEFINED;
             consumerNodeInfo =
-                    new ConsumerNodeInfo(storeManager, reqQryPriorityId, clientId,
-                            filterCondSet, reqSessionKey, reqSessionTime,
+                    new ConsumerNodeInfo(storeManager, reqQryPriorityId, groupName,
+                            clientId, filterCondSet, reqSessionKey, reqSessionTime,
                             true, partStr, msgRcvFrom);
             if (consumerRegisterMap.put(partStr, consumerNodeInfo) == null) {
-                BrokerSrvStatsHolder.incConsumerOnlineCnt();
+                BrokerSrvStatsHolder.incConsumeOnlineCnt();
             }
             heartbeatManager.regConsumerNode(getHeartbeatNodeId(clientId, partStr), clientId, partStr);
             MessageStore dataStore = null;
@@ -990,7 +986,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                     heartbeatManager.getConsumerRegMap().get(getHeartbeatNodeId(consumerId, partStr));
             if (timeoutInfo == null || System.currentTimeMillis() >= timeoutInfo.getTimeoutTime()) {
                 if (consumerRegisterMap.remove(partStr) != null) {
-                    BrokerSrvStatsHolder.decConsumerOnlineCnt(true);
+                    BrokerSrvStatsHolder.decConsumeOnlineCnt(true);
                 }
                 strBuffer.append("[Duplicated Register] Remove Invalid Consumer Register ")
                         .append(consumerId).append(TokenConstants.SEGMENT_SEP).append(partStr);
@@ -1020,10 +1016,10 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      * @return             the response
      */
     private RegisterResponseB2C inProcessConsumerUnregister(final String clientId, final String groupName,
-                                                            final String topicName, final String partStr,
-                                                            RegisterRequestC2B request, boolean overtls,
-                                                            RegisterResponseB2C.Builder builder,
-                                                            StringBuilder strBuffer) {
+            final String topicName, final String partStr,
+            RegisterRequestC2B request, boolean overtls,
+            RegisterResponseB2C.Builder builder,
+            StringBuilder strBuffer) {
         logger.info(strBuffer.append("[Consumer Unregister]").append(clientId)
                 .append(", isOverTLS=").append(overtls).toString());
         strBuffer.delete(0, strBuffer.length());
@@ -1056,7 +1052,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                     .append(request.getPartitionId()).append(" updatedOffset:").append(updatedOffset).toString());
             strBuffer.delete(0, strBuffer.length());
             if (consumerRegisterMap.remove(partStr) != null) {
-                BrokerSrvStatsHolder.decConsumerOnlineCnt(false);
+                BrokerSrvStatsHolder.decConsumeOnlineCnt(false);
             }
             heartbeatManager.unRegConsumerNode(
                     getHeartbeatNodeId(clientId, partStr));
@@ -1086,8 +1082,8 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      */
     @Override
     public HeartBeatResponseB2C consumerHeartbeatC2B(HeartBeatRequestC2B request,
-                                                     final String rmtAddress,
-                                                     boolean overtls) throws Throwable {
+            final String rmtAddress,
+            boolean overtls) throws Throwable {
         ProcessResult result = new ProcessResult();
         final StringBuilder strBuffer = new StringBuilder(512);
         final HeartBeatResponseB2C.Builder builder = HeartBeatResponseB2C.newBuilder();
@@ -1097,34 +1093,31 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
             builder.setErrMsg("StoreService temporary unavailable!");
             return builder.build();
         }
-        CertifiedResult certResult =
-                serverAuthHandler.identityValidUserInfo(request.getAuthInfo(), false);
-        if (!certResult.result) {
-            builder.setErrCode(certResult.errCode);
-            builder.setErrMsg(certResult.errInfo);
+        if (!serverAuthHandler.identityValidUserInfo(request.getAuthInfo(), false, result)) {
+            builder.setErrCode(result.getErrCode());
+            builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
+        CertifiedInfo certifiedInfo = (CertifiedInfo) result.getRetData();
         // get and check clientId field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.CLIENTID,
-                request.getClientId(), strBuffer, result)) {
+        if (!PBParameterUtils.checkClientId(request.getClientId(), strBuffer, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
         final String clientId = (String) result.getRetData();
         // get and check groupName field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.GROUPNAME,
-                request.getGroupName(), strBuffer, result)) {
+        if (!PBParameterUtils.checkGroupName(request.getGroupName(), strBuffer, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
         final String groupName = (String) result.getRetData();
         int reqQryPriorityId = request.hasQryPriorityId()
-                ? request.getQryPriorityId() : TBaseConstants.META_VALUE_UNDEFINED;
+                ? request.getQryPriorityId()
+                : TBaseConstants.META_VALUE_UNDEFINED;
         List<Partition> partitions =
                 DataConverterUtil.convertPartitionInfo(request.getPartitionInfoList());
-        CertifiedResult authorizeResult = null;
         boolean isAuthorized = false;
         List<String> failureInfo = new ArrayList<>();
         for (Partition partition : partitions) {
@@ -1135,7 +1128,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
             if (consumerNodeInfo == null) {
                 failureInfo.add(strBuffer.append(TErrCodeConstants.HB_NO_NODE)
                         .append(TokenConstants.ATTR_SEP)
-                        .append(partition.toString()).toString());
+                        .append(partition).toString());
                 strBuffer.delete(0, strBuffer.length());
                 logger.warn(strBuffer.append("[Heartbeat Check] UnRegistered Consumer:")
                         .append(clientId).append(TokenConstants.SEGMENT_SEP)
@@ -1145,7 +1138,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
             }
             if (!clientId.equals(consumerNodeInfo.getConsumerId())) {
                 failureInfo.add(strBuffer.append(TErrCodeConstants.DUPLICATE_PARTITION)
-                        .append(TokenConstants.ATTR_SEP).append(partition.toString()).toString());
+                        .append(TokenConstants.ATTR_SEP).append(partition).toString());
                 strBuffer.delete(0, strBuffer.length());
                 strBuffer.append("[Heartbeat Check] Duplicated partition: Partition ").append(partStr)
                         .append(" has been consumed by ").append(consumerNodeInfo.getConsumerId())
@@ -1155,13 +1148,10 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                 continue;
             }
             if (!isAuthorized) {
-                authorizeResult =
-                        serverAuthHandler.validConsumeAuthorizeInfo(certResult.userName,
-                                groupName, topic, consumerNodeInfo.getFilterCondStrs(), true, rmtAddress);
-                if (!authorizeResult.result) {
-                    builder.setRequireAuth(authorizeResult.reAuth);
-                    builder.setErrCode(authorizeResult.errCode);
-                    builder.setErrMsg(authorizeResult.errInfo);
+                if (!serverAuthHandler.validConsumeAuthorizeInfo(certifiedInfo.getUserName(),
+                        groupName, topic, consumerNodeInfo.getFilterCondStrs(), true, rmtAddress, result)) {
+                    builder.setErrCode(result.getErrCode());
+                    builder.setErrMsg(result.getErrMsg());
                     return builder.build();
                 }
                 isAuthorized = true;
@@ -1171,8 +1161,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                         getHeartbeatNodeId(clientId, partStr));
             } catch (HeartbeatException e) {
                 failureInfo.add(strBuffer.append(TErrCodeConstants.HB_NO_NODE)
-                        .append(TokenConstants.ATTR_SEP)
-                        .append(partition.toString()).toString());
+                        .append(TokenConstants.ATTR_SEP).append(partition).toString());
                 strBuffer.delete(0, strBuffer.length());
                 logger.warn(strBuffer.append("[Heartbeat Check] Invalid Request")
                         .append(clientId).append(TokenConstants.SEGMENT_SEP)
@@ -1184,7 +1173,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                 consumerNodeInfo.setQryPriorityId(reqQryPriorityId);
             }
         }
-        builder.setRequireAuth(certResult.reAuth);
+        builder.setRequireAuth(certifiedInfo.isReAuth());
         builder.setSuccess(true);
         builder.setErrCode(TErrCodeConstants.SUCCESS);
         builder.setHasPartFailure(false);
@@ -1207,8 +1196,9 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
      */
     @Override
     public CommitOffsetResponseB2C consumerCommitC2B(CommitOffsetRequestC2B request,
-                                                     final String rmtAddress,
-                                                     boolean overtls) throws Throwable {
+            final String rmtAddress,
+            boolean overtls) throws Throwable {
+        final long startTime = System.currentTimeMillis();
         final CommitOffsetResponseB2C.Builder builder = CommitOffsetResponseB2C.newBuilder();
         builder.setSuccess(false);
         builder.setCurrOffset(-1);
@@ -1220,16 +1210,14 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
         ProcessResult result = new ProcessResult();
         StringBuilder strBuffer = new StringBuilder(512);
         // get and check clientId field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.CLIENTID,
-                request.getClientId(), strBuffer, result)) {
+        if (!PBParameterUtils.checkClientId(request.getClientId(), strBuffer, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
         }
         final String clientId = (String) result.getRetData();
         // get and check groupName field
-        if (!PBParameterUtils.getStringParameter(WebFieldDef.GROUPNAME,
-                request.getGroupName(), strBuffer, result)) {
+        if (!PBParameterUtils.checkGroupName(request.getGroupName(), strBuffer, result)) {
             builder.setErrCode(result.getErrCode());
             builder.setErrMsg(result.getErrMsg());
             return builder.build();
@@ -1299,6 +1287,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                     .append(consumerNodeInfo.getConsumerId())
                     .append(", partition is : ").append(partStr).toString());
         }
+        BrokerSrvStatsHolder.updConfirmLatency(System.currentTimeMillis() - startTime);
         return builder.build();
     }
 
@@ -1316,8 +1305,8 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
     private int getRealQryPriorityId(final ConsumerNodeInfo consumerNodeInfo) {
         return consumerNodeInfo.getQryPriorityId() <= 0
                 ? (metadataManager.getFlowCtrlRuleHandler().getQryPriorityId() <= 0
-                ? TServerConstants.CFG_DEFAULT_CONSUME_RULE
-                : metadataManager.getFlowCtrlRuleHandler().getQryPriorityId())
+                        ? TServerConstants.CFG_DEFAULT_CONSUME_RULE
+                        : metadataManager.getFlowCtrlRuleHandler().getQryPriorityId())
                 : consumerNodeInfo.getQryPriorityId();
     }
 
@@ -1344,7 +1333,7 @@ public class BrokerServiceServer implements BrokerReadService, BrokerWriteServic
                     }
                     if (consumerNodeInfo.getConsumerId().equalsIgnoreCase(nodeInfo.getSecondKey())) {
                         if (consumerRegisterMap.remove(nodeInfo.getThirdKey()) != null) {
-                            BrokerSrvStatsHolder.decConsumerOnlineCnt(true);
+                            BrokerSrvStatsHolder.decConsumeOnlineCnt(true);
                         }
                         String[] groupTopicPart =
                                 consumerNodeInfo.getPartStr().split(TokenConstants.ATTR_SEP);

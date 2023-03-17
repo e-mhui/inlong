@@ -40,18 +40,17 @@ public class InlongCollectionUtils {
      * @return {@link ImmutableMap}
      */
     public static <K, V, T> Map<K, V> transformToImmutableMap(Collection<T> originCollection,
-                                                              Function<T, K> keyTransformFunction,
-                                                              Function<T, V> valueTransformFunction) {
+            Function<T, K> keyTransformFunction,
+            Function<T, V> valueTransformFunction) {
         if (CollectionUtils.isEmpty(originCollection)) {
             return ImmutableMap.of();
         }
-        Preconditions.checkNotNull(keyTransformFunction, "KeyTransformFunction cannot be null");
-        Preconditions.checkNotNull(valueTransformFunction, "ValueTransformFunction cannot be null");
+        Preconditions.expectNotNull(keyTransformFunction, "KeyTransformFunction cannot be null");
+        Preconditions.expectNotNull(valueTransformFunction, "ValueTransformFunction cannot be null");
 
         ImmutableMap.Builder<K, V> builder = ImmutableMap.builder();
-        originCollection.forEach(originObject ->
-                builder.put(keyTransformFunction.apply(originObject), valueTransformFunction.apply(originObject))
-        );
+        originCollection.forEach(originObject -> builder.put(keyTransformFunction.apply(originObject),
+                valueTransformFunction.apply(originObject)));
         return builder.build();
     }
 }

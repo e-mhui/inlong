@@ -17,8 +17,6 @@
 
 package org.apache.inlong.manager.pojo.source.postgresql;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,6 +24,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
+import org.apache.inlong.manager.common.util.JsonUtils;
 
 import javax.validation.constraints.NotNull;
 import java.util.List;
@@ -39,8 +38,6 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PostgreSQLSourceDTO {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper(); // thread safe
 
     @ApiModelProperty("Username of the PostgreSQL server")
     private String username;
@@ -65,6 +62,12 @@ public class PostgreSQLSourceDTO {
 
     @ApiModelProperty("List of table name")
     private List<String> tableNameList;
+
+    @ApiModelProperty("Server time zone")
+    private String serverTimeZone;
+
+    @ApiModelProperty("Scan startup mode,  either initial or never")
+    private String scanStartupMode;
 
     @ApiModelProperty("Primary key must be shared by all tables")
     private String primaryKey;
@@ -92,10 +95,10 @@ public class PostgreSQLSourceDTO {
 
     public static PostgreSQLSourceDTO getFromJson(@NotNull String extParams) {
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, PostgreSQLSourceDTO.class);
+            return JsonUtils.parseObject(extParams, PostgreSQLSourceDTO.class);
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.SOURCE_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SOURCE_INFO_INCORRECT,
+                    String.format("parse extParams of PostgreSQLSource failure: %s", e.getMessage()));
         }
     }
 

@@ -29,25 +29,21 @@ import java.util.concurrent.ConcurrentHashMap;
 @Data
 public class SortSourceStreamInfo {
 
-    private static final long serialVersionUID = 1L;
     private static final Logger LOGGER = LoggerFactory.getLogger(SortSourceStreamInfo.class);
-    String sortClusterName;
-    String sortTaskName;
-    String groupId;
+    private static final Gson GSON = new Gson();
+
+    private String inlongGroupId;
+    private String inlongStreamId;
+    private String mqResource;
     String extParams;
-    Map<String, String> extParamsMap;
+    Map<String, String> extParamsMap = new ConcurrentHashMap<>();
 
     public Map<String, String> getExtParamsMap() {
-        if (extParamsMap != null) {
-            return extParamsMap;
-        }
-        if (StringUtils.isNotBlank(extParams)) {
+        if (extParamsMap.isEmpty() && StringUtils.isNotBlank(extParams)) {
             try {
-                Gson gson = new Gson();
-                extParamsMap = gson.fromJson(extParams, Map.class);
+                extParamsMap = GSON.fromJson(extParams, Map.class);
             } catch (Throwable t) {
-                LOGGER.error("fail to parse source stream ext params", t);
-                extParamsMap = new ConcurrentHashMap<>();
+                LOGGER.error("fail to parse group ext params", t);
             }
         }
         return extParamsMap;

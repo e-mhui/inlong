@@ -17,30 +17,35 @@
 
 package org.apache.inlong.manager.web.controller;
 
-import com.github.pagehelper.PageInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiImplicitParam;
 import io.swagger.annotations.ApiImplicitParams;
 import io.swagger.annotations.ApiOperation;
 import org.apache.inlong.manager.common.enums.OperationType;
+import org.apache.inlong.manager.common.validation.UpdateValidation;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.common.Response;
 import org.apache.inlong.manager.pojo.stream.InlongStreamBriefInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamPageRequest;
 import org.apache.inlong.manager.pojo.stream.InlongStreamRequest;
-import org.apache.inlong.manager.pojo.stream.InlongStreamResponse;
+import org.apache.inlong.manager.pojo.stream.StreamField;
 import org.apache.inlong.manager.pojo.user.UserRoleCode;
 import org.apache.inlong.manager.service.operationlog.OperationLog;
 import org.apache.inlong.manager.service.stream.InlongStreamProcessService;
 import org.apache.inlong.manager.service.stream.InlongStreamService;
 import org.apache.inlong.manager.service.user.LoginUserUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * Inlong stream control layer
@@ -49,6 +54,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 @Api(tags = "Inlong-Stream-API")
 public class InlongStreamController {
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private InlongStreamService streamService;
@@ -79,21 +87,21 @@ public class InlongStreamController {
             @ApiImplicitParam(name = "groupId", dataTypeClass = String.class, required = true),
             @ApiImplicitParam(name = "streamId", dataTypeClass = String.class, required = true)
     })
-    public Response<InlongStreamResponse> get(@RequestParam String groupId, @RequestParam String streamId) {
-        return Response.success(streamService.get(groupId, streamId).genResponse());
+    public Response<InlongStreamInfo> get(@RequestParam String groupId, @RequestParam String streamId) {
+        return Response.success(streamService.get(groupId, streamId));
     }
 
     @RequestMapping(value = "/stream/list", method = RequestMethod.POST)
-    @ApiOperation(value = "Get inlong stream brief info by paginating")
-    public Response<PageInfo<InlongStreamBriefInfo>> listByCondition(@RequestBody InlongStreamPageRequest request) {
+    @ApiOperation(value = "List inlong stream briefs by paginating")
+    public Response<PageResult<InlongStreamBriefInfo>> listByCondition(@RequestBody InlongStreamPageRequest request) {
         request.setCurrentUser(LoginUserUtils.getLoginUser().getName());
         request.setIsAdminRole(LoginUserUtils.getLoginUser().getRoles().contains(UserRoleCode.ADMIN));
         return Response.success(streamService.listBrief(request));
     }
 
     @RequestMapping(value = "/stream/listAll", method = RequestMethod.POST)
-    @ApiOperation(value = "Get inlong stream with all sources and sinks by paginating")
-    public Response<PageInfo<InlongStreamInfo>> listAllWithGroupId(@RequestBody InlongStreamPageRequest request) {
+    @ApiOperation(value = "List inlong streams with sources and sinks by paginating")
+    public Response<PageResult<InlongStreamInfo>> listAllWithGroupId(@RequestBody InlongStreamPageRequest request) {
         request.setCurrentUser(LoginUserUtils.getLoginUser().getName());
         request.setIsAdminRole(LoginUserUtils.getLoginUser().getRoles().contains(UserRoleCode.ADMIN));
         return Response.success(streamService.listAll(request));
@@ -102,7 +110,7 @@ public class InlongStreamController {
     @RequestMapping(value = "/stream/update", method = RequestMethod.POST)
     @OperationLog(operation = OperationType.UPDATE)
     @ApiOperation(value = "Update inlong stream")
-    public Response<Boolean> update(@RequestBody InlongStreamRequest request) {
+    public Response<Boolean> update(@Validated(UpdateValidation.class) @RequestBody InlongStreamRequest request) {
         String username = LoginUserUtils.getLoginUser().getName();
         return Response.success(streamService.update(request, username));
     }
@@ -166,6 +174,13 @@ public class InlongStreamController {
     public Response<Boolean> delete(@RequestParam String groupId, @RequestParam String streamId) {
         String username = LoginUserUtils.getLoginUser().getName();
         return Response.success(streamService.delete(groupId, streamId, username));
+    }
+
+    @RequestMapping(value = "/stream/parseFields", method = RequestMethod.POST)
+    @ApiOperation(value = "Parse inlong stream fields from JSON string")
+    @ApiImplicitParam(name = "fieldsJson", dataTypeClass = String.class, required = true)
+    public Response<List<StreamField>> parseFields(@RequestBody String fieldsJson) {
+        return Response.success(streamService.parseFields(fieldsJson));
     }
 
 }

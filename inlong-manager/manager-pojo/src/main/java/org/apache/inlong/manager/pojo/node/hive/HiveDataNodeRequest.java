@@ -36,9 +36,6 @@ import org.apache.inlong.manager.pojo.node.DataNodeRequest;
 @ApiModel("Hive data node request")
 public class HiveDataNodeRequest extends DataNodeRequest {
 
-    @ApiModelProperty("Hive JDBC URL, such as jdbc:hive2://${ip}:${port}")
-    private String jdbcUrl;
-
     @ApiModelProperty("Version for Hive, such as: 3.2.1")
     private String hiveVersion;
 
@@ -46,7 +43,7 @@ public class HiveDataNodeRequest extends DataNodeRequest {
     private String hiveConfDir;
 
     @ApiModelProperty("HDFS default FS, such as: hdfs://127.0.0.1:9000")
-    private String hdfsPath;
+    private String dataPath;
 
     @ApiModelProperty("Hive warehouse path, such as: /user/hive/warehouse/")
     private String warehouse;

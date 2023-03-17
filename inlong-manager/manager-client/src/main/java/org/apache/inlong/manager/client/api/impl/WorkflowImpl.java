@@ -17,13 +17,13 @@
 
 package org.apache.inlong.manager.client.api.impl;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.Workflow;
 import org.apache.inlong.manager.client.api.inner.client.ClientFactory;
 import org.apache.inlong.manager.client.api.inner.client.WorkflowClient;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
 import org.apache.inlong.manager.common.util.Preconditions;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.workflow.ProcessDetailResponse;
 import org.apache.inlong.manager.pojo.workflow.ProcessRequest;
 import org.apache.inlong.manager.pojo.workflow.ProcessResponse;
@@ -43,50 +43,50 @@ public class WorkflowImpl implements Workflow {
 
     @Override
     public WorkflowResult start(WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(request.getName(), "process name cannot be null");
-        Preconditions.checkNotNull(request.getForm(), "form cannot be null");
+        Preconditions.expectNotNull(request.getName(), "process name cannot be null");
+        Preconditions.expectNotNull(request.getForm(), "form cannot be null");
         return workflowClient.start(request);
     }
 
     @Override
     public WorkflowResult cancel(Integer processId, WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(processId, "process id cannot be null");
+        Preconditions.expectNotNull(processId, "process id cannot be null");
         return workflowClient.cancel(processId, request);
     }
 
     @Override
     public WorkflowResult continueProcess(Integer processId, WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(processId, "process id cannot be null");
+        Preconditions.expectNotNull(processId, "process id cannot be null");
         return workflowClient.continueProcess(processId, request);
     }
 
     @Override
     public WorkflowResult reject(Integer taskId, WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(taskId, "task id cannot be null");
+        Preconditions.expectNotNull(taskId, "task id cannot be null");
         return workflowClient.reject(taskId, request);
     }
 
     @Override
     public WorkflowResult complete(Integer taskId, WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(taskId, "task id cannot be null");
+        Preconditions.expectNotNull(taskId, "task id cannot be null");
         return workflowClient.complete(taskId, request);
     }
 
     @Override
     public ProcessDetailResponse detail(Integer processId, Integer taskId) {
-        Preconditions.checkNotNull(processId, "process id cannot be null");
+        Preconditions.expectNotNull(processId, "process id cannot be null");
         return workflowClient.detail(processId, taskId);
     }
 
     @Override
-    public PageInfo<ProcessResponse> listProcess(ProcessRequest request) {
-        Preconditions.checkNotNull(request, "process request cannot be null");
+    public PageResult<ProcessResponse> listProcess(ProcessRequest request) {
+        Preconditions.expectNotNull(request, "process request cannot be null");
         return workflowClient.listProcess(request);
     }
 
     @Override
-    public PageInfo<TaskResponse> listTask(TaskRequest request) {
-        Preconditions.checkNotNull(request, "task request cannot be null");
+    public PageResult<TaskResponse> listTask(TaskRequest request) {
+        Preconditions.expectNotNull(request, "task request cannot be null");
         return workflowClient.listTask(request);
     }
 }

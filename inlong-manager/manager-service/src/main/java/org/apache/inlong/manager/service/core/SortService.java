@@ -17,13 +17,18 @@
 
 package org.apache.inlong.manager.service.core;
 
-import org.apache.inlong.common.pojo.sortstandalone.SortClusterResponse;
 import org.apache.inlong.common.pojo.sdk.SortSourceConfigResponse;
+import org.apache.inlong.common.pojo.sortstandalone.SortClusterResponse;
+import org.apache.inlong.manager.pojo.sort.SortStatusInfo;
+import org.apache.inlong.manager.pojo.sort.SortStatusRequest;
+
+import java.util.List;
 
 /**
  * Sort Service
  */
 public interface SortService {
+
     /**
      * Get sort cluster config.
      *
@@ -55,4 +60,13 @@ public interface SortService {
      * @return Response of sort cluster config
      */
     SortSourceConfigResponse getSourceConfig(String clusterName, String sortTaskId, String md5);
+
+    /**
+     * List Sort job status.
+     *
+     * @param request Sort status request, including inlong group ids,sort cluster token, etc.
+     * @return list of Sort job status
+     */
+    List<SortStatusInfo> listSortStatus(SortStatusRequest request);
+
 }

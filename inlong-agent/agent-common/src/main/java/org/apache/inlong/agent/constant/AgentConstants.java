@@ -17,6 +17,8 @@
 
 package org.apache.inlong.agent.constant;
 
+import io.netty.util.NettyRuntime;
+import io.netty.util.internal.SystemPropertyUtil;
 import org.apache.inlong.agent.utils.AgentUtils;
 
 /**
@@ -43,145 +45,77 @@ public class AgentConstants {
     public static final String DEFAULT_AGENT_ROCKS_DB_PATH = ".rocksdb";
 
     public static final String AGENT_UNIQ_ID = "agent.uniq.id";
-    // default use local ip as uniq id for agent.
-    public static final String DEFAULT_AGENT_UNIQ_ID = AgentUtils.getLocalIp();
-
     public static final String AGENT_DB_INSTANCE_NAME = "agent.db.instance.name";
     public static final String DEFAULT_AGENT_DB_INSTANCE_NAME = "agent";
-
     public static final String AGENT_DB_CLASSNAME = "agent.db.classname";
     public static final String DEFAULT_AGENT_DB_CLASSNAME = "org.apache.inlong.agent.db.RocksDbImp";
-
     // default is empty.
     public static final String AGENT_FETCHER_CLASSNAME = "agent.fetcher.classname";
-
     public static final String AGENT_MESSAGE_FILTER_CLASSNAME = "agent.message.filter.classname";
-
     public static final String AGENT_CONF_PARENT = "agent.conf.parent";
     public static final String DEFAULT_AGENT_CONF_PARENT = "conf";
-
-    public static final String AGENT_LOCAL_STORE_READONLY = "agent.localStore.readonly";
-    public static final boolean DEFAULT_AGENT_LOCAL_STORE_READONLY = false;
-
     public static final String AGENT_HTTP_PORT = "agent.http.port";
     public static final int DEFAULT_AGENT_HTTP_PORT = 8008;
-
     public static final String AGENT_ENABLE_HTTP = "agent.http.enable";
     public static final boolean DEFAULT_AGENT_ENABLE_HTTP = false;
-
     public static final String TRIGGER_FETCH_INTERVAL = "trigger.fetch.interval";
     public static final int DEFAULT_TRIGGER_FETCH_INTERVAL = 1;
-
     public static final String TRIGGER_MAX_RUNNING_NUM = "trigger.max.running.num";
     public static final int DEFAULT_TRIGGER_MAX_RUNNING_NUM = 4096;
-
-    public static final String AGENT_LOCAL_STORE_TRANSACTIONAL = "agent.localStore.transactional";
-    public static final boolean DEFAULT_AGENT_LOCAL_STORE_TRANSACTIONAL = true;
-
-    public static final String AGENT_LOCAL_STORE_LOCK_TIMEOUT = "agent.localStore.lockTimeout";
-    public static final int DEFAULT_AGENT_LOCAL_STORE_LOCK_TIMEOUT = 10000;
-
-    public static final String AGENT_LOCAL_STORE_NO_SYNC_VOID = "agent.localStore.noSyncVoid";
-    public static final boolean DEFAULT_AGENT_LOCAL_STORE_NO_SYNC_VOID = false;
-
-    public static final String AGENT_LOCAL_STORE_WRITE_NO_SYNC_VOID =
-            "agent.localStore.WriteNoSyncVoid";
-    public static final boolean DEFAULT_AGENT_LOCAL_STORE_WRITE_NO_SYNC_VOID = false;
-
     public static final String AGENT_FETCH_CENTER_INTERVAL_SECONDS = "agent.fetchCenter.interval";
     public static final int DEFAULT_AGENT_FETCH_CENTER_INTERVAL_SECONDS = 5;
-
     public static final String AGENT_TRIGGER_CHECK_INTERVAL_SECONDS = "agent.trigger.check.interval";
     public static final int DEFAULT_AGENT_TRIGGER_CHECK_INTERVAL_SECONDS = 1;
-
     public static final String THREAD_POOL_AWAIT_TIME = "thread.pool.await.time";
     // time in ms
     public static final long DEFAULT_THREAD_POOL_AWAIT_TIME = 300;
-
-    public static final String JOB_THREAD_PENDING_MAX = "job.thread.pending.max";
-    public static final int DEFAULT_JOB_THREAD_PENDING_MAX = 40;
-
-    public static final String JOB_THREAD_RUNNING_CORE = "job.thread.running.core";
-    public static final int DEFAULT_JOB_THREAD_RUNNING_CORE = 4;
-
     public static final String JOB_MONITOR_INTERVAL = "job.monitor.interval";
     public static final int DEFAULT_JOB_MONITOR_INTERVAL = 5;
-
-    public static final String JOB_THREAD_RUNNING_MAX = "job.thread.running.max";
-    public static final int DEFAULT_JOB_THREAD_RUNNING_MAX = 20;
-
-    public static final String JOB_RUNNING_THREAD_KEEP_ALIVE = "job.running.thread.keepAlive";
-    public static final long DEFAULT_JOB_RUNNING_THREAD_KEEP_ALIVE = 60L;
-
     public static final String JOB_FINISH_CHECK_INTERVAL = "job.finish.checkInterval";
     public static final long DEFAULT_JOB_FINISH_CHECK_INTERVAL = 6L;
-
-    public static final String TASK_PENDING_MAX = "task.pending.max";
-    public static final int DEFAULT_TASK_PENDING_MAX = 100;
-
-    public static final String TASK_RUNNING_THREAD_CORE_SIZE = "task.running.thread.coreSize";
-    public static final int DEFAULT_TASK_RUNNING_THREAD_CORE_SIZE = 4;
-
-    public static final String TASK_RUNNING_THREAD_MAX_SIZE = "task.running.thread.maxSize";
-    public static final int DEFAULT_TASK_RUNNING_THREAD_MAX_SIZE =
-            Runtime.getRuntime().availableProcessors() * 2;
-
-    public static final String TASK_RUNNING_THREAD_KEEP_ALIVE = "task.running.thread.keepAlive";
-    public static final long DEFAULT_TASK_RUNNING_THREAD_KEEP_ALIVE = 60L;
-
     public static final String TASK_RETRY_MAX_CAPACITY = "task.retry.maxCapacity";
     public static final int DEFAULT_TASK_RETRY_MAX_CAPACITY = 10000;
-
     public static final String TASK_MONITOR_INTERVAL = "task.monitor.interval";
     public static final int DEFAULT_TASK_MONITOR_INTERVAL = 6;
-
     public static final String TASK_RETRY_SUBMIT_WAIT_SECONDS = "task.retry.submit.waitSeconds";
     public static final int DEFAULT_TASK_RETRY_SUBMIT_WAIT_SECONDS = 5;
-
     public static final String TASK_MAX_RETRY_TIME = "task.maxRetry.time";
     public static final int DEFAULT_TASK_MAX_RETRY_TIME = 3;
-
     public static final String TASK_PUSH_MAX_SECOND = "task.push.maxSecond";
     public static final int DEFAULT_TASK_PUSH_MAX_SECOND = 2;
-
     public static final String TASK_PULL_MAX_SECOND = "task.pull.maxSecond";
     public static final int DEFAULT_TASK_PULL_MAX_SECOND = 2;
-
     public static final String CHANNEL_MEMORY_CAPACITY = "channel.memory.capacity";
-    public static final int DEFAULT_CHANNEL_MEMORY_CAPACITY = 1000;
-
+    public static final int DEFAULT_CHANNEL_MEMORY_CAPACITY = 2000;
     public static final String TRIGGER_CHECK_INTERVAL = "trigger.check.interval";
     public static final int DEFAULT_TRIGGER_CHECK_INTERVAL = 2;
-
-    public static final String WORKER_POOL_AWAIT_TIME = "worker.pool.await.time";
-    public static final long DEFAULT_WORKER_POOL_AWAIT_TIME = 10;
-
     public static final String JOB_DB_CACHE_TIME = "job.db.cache.time";
     // cache for 3 days.
     public static final long DEFAULT_JOB_DB_CACHE_TIME = 3 * 24 * 60 * 60 * 1000;
-
     public static final String JOB_DB_CACHE_CHECK_INTERVAL = "job.db.cache.check.interval";
     public static final int DEFAULT_JOB_DB_CACHE_CHECK_INTERVAL = 60 * 60;
-
     public static final String JOB_NUMBER_LIMIT = "job.number.limit";
     public static final int DEFAULT_JOB_NUMBER_LIMIT = 15;
-
     public static final String AGENT_LOCAL_IP = "agent.local.ip";
     public static final String DEFAULT_LOCAL_IP = "127.0.0.1";
+    public static final String DEFAULT_LOCAL_HOST = "localhost";
+    // default use local ip as uniq id for agent.
+    public static final String DEFAULT_AGENT_UNIQ_ID = AgentUtils.getLocalIp();
+    public static final String CUSTOM_FIXED_IP = "agent.custom.fixed.ip";
 
     public static final String AGENT_CLUSTER_NAME = "agent.cluster.name";
     public static final String AGENT_CLUSTER_TAG = "agent.cluster.tag";
     public static final String AGENT_CLUSTER_IN_CHARGES = "agent.cluster.inCharges";
 
     public static final String AGENT_LOCAL_UUID = "agent.local.uuid";
-
     public static final String AGENT_LOCAL_UUID_OPEN = "agent.local.uuid.open";
     public static final Boolean DEFAULT_AGENT_LOCAL_UUID_OPEN = false;
+    public static final String AGENT_NODE_GROUP = "agent.node.group";
 
     public static final String PROMETHEUS_EXPORTER_PORT = "agent.prometheus.exporter.port";
     public static final int DEFAULT_PROMETHEUS_EXPORTER_PORT = 8080;
 
-    public static final String AUDIT_ENABLE = "agent.audit.enable";
+    public static final String AUDIT_ENABLE = "audit.enable";
     public static final boolean DEFAULT_AUDIT_ENABLE = true;
 
     public static final String AUDIT_KEY_PROXYS = "audit.proxys";
@@ -199,4 +133,50 @@ public class AgentConstants {
     public static final String AGENT_METRIC_LISTENER_CLASS = "agent.domainListeners";
     public static final String AGENT_METRIC_LISTENER_CLASS_DEFAULT =
             "org.apache.inlong.agent.metrics.AgentPrometheusMetricListener";
+
+    // pulsar sink config
+    public static final String PULSAR_CLIENT_IO_TREHAD_NUM = "agent.sink.pulsar.client.io.thread.num";
+    public static final int DEFAULT_PULSAR_CLIENT_IO_TREHAD_NUM = Math.max(1,
+            SystemPropertyUtil.getInt("io.netty.eventLoopThreads", NettyRuntime.availableProcessors() * 2));
+
+    public static final String PULSAR_CONNECTION_PRE_BROKER = "agent.sink.pulsar.connection.pre.broker";
+    public static final int DEFAULT_PULSAR_CONNECTION_PRE_BROKER = 1;
+
+    public static final String PULSAR_CLIENT_TIMEOUT_SECOND = "agent.sink.pulsar.send.timeout.second";
+    public static final int DEFAULT_PULSAR_CLIENT_TIMEOUT_SECOND = 30;
+
+    public static final String PULSAR_CLIENT_ENABLE_BATCH = "agent.sink.pullsar.enable.batch";
+    public static final boolean DEFAULT_PULSAR_CLIENT_ENABLE_BATCH = true;
+
+    public static final String PULSAR_CLIENT_BLOCK_IF_QUEUE_FULL = "agent.sink.pulsar.block.if.queue.full";
+    public static final boolean DEFAULT_BLOCK_IF_QUEUE_FULL = true;
+
+    public static final String PULSAR_CLIENT_MAX_PENDING_MESSAGES = "agent.sink.pulsar.max.pending.messages";
+    public static final int DEFAULT_MAX_PENDING_MESSAGES = 10000;
+
+    public static final String PULSAR_CLIENT_MAX_PENDING_MESSAGES_ACROSS_PARTITION =
+            "agent.sink.pulsar.max.messages.across.partition";
+    public static final int DEFAULT_MAX_PENDING_MESSAGES_ACROSS_PARTITION = 500000;
+
+    public static final String PULSAR_CLIENT_MAX_BATCH_BYTES = "agent.sink.pulsar.max.batch.bytes";
+    public static final int DEFAULT_MAX_BATCH_BYTES = 128 * 1024;
+
+    public static final String PULSAR_CLIENT_MAX_BATCH_MESSAGES = "agent.sink.pulsar.max.batch.messages";
+    public static final int DEFAULT_MAX_BATCH_MESSAGES = 1000;
+
+    public static final String PULSAR_CLIENT_MAX_BATCH_INTERVAL_MILLIS = "agent.sink.pulsar.max.batch.interval.millis";
+    public static final int DEFAULT_MAX_BATCH_INTERVAL_MILLIS = 1;
+
+    public static final String PULSAR_CLIENT_COMPRESSION_TYPE = "agent.sink.pulsar.compression.type";
+    public static final String DEFAULT_COMPRESSION_TYPE = "NONE";
+
+    public static final String PULSAR_CLIENT_PRODUCER_NUM = "agent.sink.pulsar.producer.num";
+    public static final int DEFAULT_PRODUCER_NUM = 3;
+
+    public static final String PULSAR_CLIENT_ENABLE_ASYNC_SEND = "agent.sink.pulsar.enbale.async.send";
+    public static final boolean DEFAULT_ENABLE_ASYNC_SEND = true;
+
+    public static final String PULSAR_SINK_SEND_QUEUE_SIZE = "agent.sink.pulsar.send.queue.size";
+    public static final int DEFAULT_SEND_QUEUE_SIZE = 20000;
+
 }

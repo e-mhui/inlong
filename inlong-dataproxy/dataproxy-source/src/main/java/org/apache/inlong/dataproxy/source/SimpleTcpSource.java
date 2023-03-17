@@ -39,9 +39,8 @@ import org.apache.commons.io.IOUtils;
 import org.apache.flume.Context;
 import org.apache.flume.EventDrivenSource;
 import org.apache.flume.conf.Configurable;
-import org.apache.inlong.common.metric.MetricRegister;
+import org.apache.inlong.dataproxy.config.ConfigManager;
 import org.apache.inlong.dataproxy.consts.ConfigConstants;
-import org.apache.inlong.dataproxy.metrics.DataProxyMetricItemSet;
 import org.apache.inlong.dataproxy.utils.EventLoopUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +50,9 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class SimpleTcpSource extends BaseSource
-        implements Configurable, EventDrivenSource {
+        implements
+            Configurable,
+            EventDrivenSource {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleTcpSource.class);
 
@@ -82,8 +83,6 @@ public class SimpleTcpSource extends BaseSource
     protected String topic;
 
     private ServerBootstrap bootstrap;
-
-    private DataProxyMetricItemSet metricItemSet;
 
     public SimpleTcpSource() {
         super();
@@ -148,6 +147,7 @@ public class SimpleTcpSource extends BaseSource
     }
 
     private class CheckBlackListThread extends Thread {
+
         private boolean shutdown = false;
 
         public void shutdouwn() {
@@ -182,11 +182,9 @@ public class SimpleTcpSource extends BaseSource
     @Override
     public synchronized void startSource() {
         logger.info("start " + this.getName());
-        this.metricItemSet = new DataProxyMetricItemSet(this.getName());
-        MetricRegister.register(metricItemSet);
         checkBlackListThread = new CheckBlackListThread();
         checkBlackListThread.start();
-//        ThreadRenamingRunnable.setThreadNameDeterminer(ThreadNameDeterminer.CURRENT);
+        // ThreadRenamingRunnable.setThreadNameDeterminer(ThreadNameDeterminer.CURRENT);
 
         logger.info("Set max workers : {} ;", maxThreads);
 
@@ -206,7 +204,7 @@ public class SimpleTcpSource extends BaseSource
         bootstrap.childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
         bootstrap.childOption(ChannelOption.SO_RCVBUF, receiveBufferSize);
         bootstrap.childOption(ChannelOption.SO_SNDBUF, sendBufferSize);
-//        serverBootstrap.childOption("child.trafficClass", trafficClass);
+        // serverBootstrap.childOption("child.trafficClass", trafficClass);
         bootstrap.childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, highWaterMark);
         bootstrap.channel(EventLoopUtil.getServerSocketChannelClass(workerGroup));
         EventLoopUtil.enableTriggeredMode(bootstrap);
@@ -227,6 +225,8 @@ public class SimpleTcpSource extends BaseSource
                     host, port, e);
             System.exit(-1);
         }
+        ConfigManager.getInstance().addSourceReportInfo(
+                host, String.valueOf(port), getProtocolName().toUpperCase());
         logger.info("Simple TCP Source started at host {}, port {}", host, port);
     }
 
@@ -259,7 +259,7 @@ public class SimpleTcpSource extends BaseSource
 
         trafficClass = context.getInteger(ConfigConstants.TRAFFIC_CLASS, TRAFFIC_CLASS_TYPE_0);
         Preconditions.checkArgument((trafficClass == TRAFFIC_CLASS_TYPE_0
-                        || trafficClass == TRAFFIC_CLASS_TYPE_96),
+                || trafficClass == TRAFFIC_CLASS_TYPE_96),
                 "trafficClass must be == 0 or == 96");
 
         try {
@@ -268,14 +268,6 @@ public class SimpleTcpSource extends BaseSource
             logger.warn("Simple TCP Source max-threads property must specify an integer value. {}",
                     context.getString(ConfigConstants.MAX_THREADS));
         }
-    }
-
-    /**
-     * get metricItemSet
-     * @return the metricItemSet
-     */
-    public DataProxyMetricItemSet getMetricItemSet() {
-        return metricItemSet;
     }
 
     @Override

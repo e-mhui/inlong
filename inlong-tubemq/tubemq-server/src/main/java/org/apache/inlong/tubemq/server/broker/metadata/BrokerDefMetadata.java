@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -25,6 +25,7 @@ import org.apache.inlong.tubemq.corebase.utils.TStringUtils;
  * These metadata will be overwrite if explicitly be set.
  */
 public class BrokerDefMetadata {
+
     // topic's store file count.
     private int numTopicStores = 1;
     // topic's partition count.
@@ -65,7 +66,8 @@ public class BrokerDefMetadata {
         if (TStringUtils.isBlank(brokerDefMetaConfInfo)) {
             return;
         }
-        String[] brokerDefaultConfInfoArr = brokerDefMetaConfInfo.split(TokenConstants.ATTR_SEP);
+        String[] brokerDefaultConfInfoArr =
+                brokerDefMetaConfInfo.split(TokenConstants.ATTR_SEP, -1);
         this.numPartitions = Integer.parseInt(brokerDefaultConfInfoArr[0]);
         this.acceptPublish = Boolean.parseBoolean(brokerDefaultConfInfoArr[1]);
         this.acceptSubscribe = Boolean.parseBoolean(brokerDefaultConfInfoArr[2]);

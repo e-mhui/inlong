@@ -17,35 +17,26 @@
 
 package org.apache.inlong.manager.pojo.sink.es;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.inlong.manager.common.consts.SinkType;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
+import org.apache.inlong.manager.common.util.CommonBeanUtils;
+import org.apache.inlong.manager.common.util.JsonTypeDefine;
+import org.apache.inlong.manager.common.util.JsonUtils;
+import org.apache.inlong.manager.pojo.sink.SinkField;
 
 import javax.validation.constraints.NotNull;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ElasticsearchFieldInfo {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    @ApiModelProperty("Elasticsearch Field name")
-    private String name;
-
-    @ApiModelProperty("Elasticsearch Field type")
-    private String type;
-
-    @ApiModelProperty("Elasticsearch Field text format")
-    private String format;
+@JsonTypeDefine(value = SinkType.ELASTICSEARCH)
+public class ElasticsearchFieldInfo extends SinkField {
 
     @ApiModelProperty("Elasticsearch Analyzer")
     private String analyzer;
@@ -57,6 +48,13 @@ public class ElasticsearchFieldInfo {
     private String scalingFactor;
 
     /**
+     * Get the dto instance from the request
+     */
+    public static ElasticsearchFieldInfo getFromRequest(SinkField sinkField) {
+        return CommonBeanUtils.copyProperties(sinkField, ElasticsearchFieldInfo::new, true);
+    }
+
+    /**
      * Get the extra param from the Json
      */
     public static ElasticsearchFieldInfo getFromJson(@NotNull String extParams) {
@@ -64,10 +62,10 @@ public class ElasticsearchFieldInfo {
             return new ElasticsearchFieldInfo();
         }
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, ElasticsearchFieldInfo.class);
+            return JsonUtils.parseObject(extParams, ElasticsearchFieldInfo.class);
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT,
+                    String.format("Failed to parse extParams for Elasticsearch fieldInfo: %s", e.getMessage()));
         }
     }
 

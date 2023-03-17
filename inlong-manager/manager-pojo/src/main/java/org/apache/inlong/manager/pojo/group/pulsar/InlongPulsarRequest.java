@@ -22,7 +22,7 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
-import org.apache.inlong.manager.common.consts.MQType;
+import org.apache.inlong.common.constant.MQType;
 import org.apache.inlong.manager.common.util.JsonTypeDefine;
 import org.apache.inlong.manager.pojo.group.InlongGroupRequest;
 
@@ -35,6 +35,13 @@ import org.apache.inlong.manager.pojo.group.InlongGroupRequest;
 @ApiModel("Inlong group request for Pulsar")
 @JsonTypeDefine(value = MQType.PULSAR)
 public class InlongPulsarRequest extends InlongGroupRequest {
+
+    /**
+     * TODO Add default value InlongConstants.DEFAULT_PULSAR_TENANT when you remove the 'tenant'
+     *  from {@link org.apache.inlong.manager.pojo.cluster.pulsar.PulsarClusterRequest}
+     */
+    @ApiModelProperty(value = "Pulsar tenant")
+    private String tenant;
 
     @ApiModelProperty(value = "Queue model, parallel: multiple partitions, high throughput, out-of-order messages;"
             + "serial: single partition, low throughput, and orderly messages")

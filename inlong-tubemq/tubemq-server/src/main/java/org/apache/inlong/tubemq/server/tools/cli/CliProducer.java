@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -46,8 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class is use to process CLI Producer process for script #{bin/tubemq-producer-test.sh}.
- *
+ * This class is used to process CLI Producer process for script #{bin/tubemq-producer-test.sh}.
  *
  */
 public class CliProducer extends CliAbstractBase {
@@ -98,8 +97,8 @@ public class CliProducer extends CliAbstractBase {
         addCommandOption(CliArgDef.MASTERSERVER);
         addCommandOption(CliArgDef.MESSAGES);
         addCommandOption(CliArgDef.MSGDATASIZE);
-        //addCommandOption(CliArgDef.PAYLOADFILE);
-        //addCommandOption(CliArgDef.PAYLOADDELIM);
+        // addCommandOption(CliArgDef.PAYLOADFILE);
+        // addCommandOption(CliArgDef.PAYLOADDELIM);
         addCommandOption(CliArgDef.PRDTOPIC);
         addCommandOption(CliArgDef.RPCTIMEOUT);
         addCommandOption(CliArgDef.CONNREUSE);
@@ -194,6 +193,7 @@ public class CliProducer extends CliAbstractBase {
         // initial send thread service
         sendExecutorService =
                 Executors.newFixedThreadPool(sendThreadCnt, new ThreadFactory() {
+
                     @Override
                     public Thread newThread(Runnable runnable) {
                         return new Thread(runnable, "sender_" + producerMap.size());
@@ -296,6 +296,7 @@ public class CliProducer extends CliAbstractBase {
     }
 
     private class DefaultSendCallback implements MessageSentCallback {
+
         @Override
         public void onMessageSent(MessageSentResult result) {
             TOTAL_COUNTER.incrementAndGet();

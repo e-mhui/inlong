@@ -17,34 +17,42 @@
  * under the License.
  */
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button, Card, Modal, message } from 'antd';
 import { PageContainer, Container } from '@/components/PageContainer';
 import HighTable from '@/components/HighTable';
 import { DashboardCardList } from '@/components/DashboardCard';
 import { useRequest, useHistory } from '@/hooks';
-import { useTranslation } from 'react-i18next';
 import request from '@/utils/request';
 import { defaultSize } from '@/configs/pagination';
-import { dashCardList, getFilterFormContent, getColumns } from './config';
+import { dashCardList, useColumns } from './config';
+import { statusList, lastConsumerStatusList } from '@/metas/consumes/common/status';
+import i18n from '@/i18n';
+import { useDefaultMeta } from '@/metas';
 
 const Comp: React.FC = () => {
-  const { t } = useTranslation();
+  const { options: consumes } = useDefaultMeta('consume');
+
   const history = useHistory();
   const [options, setOptions] = useState({
     // keyword: '',
     // status: '',
+    // mqType: '',
     pageSize: defaultSize,
     pageNum: 1,
   });
 
   const { data: summary = {} } = useRequest({
-    url: '/consumption/summary',
+    url: '/consume/countStatus',
   });
 
-  const { data, loading, run: getList } = useRequest(
+  const {
+    data,
+    loading,
+    run: getList,
+  } = useRequest(
     {
-      url: '/consumption/list',
+      url: '/consume/list',
       params: options,
     },
     {
@@ -54,14 +62,14 @@ const Comp: React.FC = () => {
 
   const onDelete = async ({ id }) => {
     Modal.confirm({
-      title: t('basic.DeleteConfirm'),
+      title: i18n.t('basic.DeleteConfirm'),
       onOk: async () => {
         await request({
-          url: `/consumption/delete/${id}`,
+          url: `/consume/delete/${id}`,
           method: 'DELETE',
         });
         await getList();
-        message.success(t('basic.DeleteSuccess'));
+        message.success(i18n.t('basic.DeleteSuccess'));
       },
     });
   };
@@ -93,6 +101,55 @@ const Comp: React.FC = () => {
     title: summary[item.dataIndex] || 0,
   }));
 
+  const columns = useColumns({ onDelete });
+
+  const getFilterFormContent = useCallback(
+    defaultValues => [
+      {
+        type: 'inputsearch',
+        name: 'keyword',
+        initialValue: defaultValues.keyword,
+        props: {
+          allowClear: true,
+        },
+      },
+      {
+        type: 'select',
+        name: 'status',
+        label: i18n.t('basic.Status'),
+        initialValue: defaultValues.status,
+        props: {
+          allowClear: true,
+          options: statusList,
+          dropdownMatchSelectWidth: false,
+        },
+      },
+      {
+        type: 'select',
+        name: 'lastConsumeStatus',
+        label: i18n.t('pages.ConsumeDashboard.config.OperatingStatus'),
+        initialValue: defaultValues.lastConsumeStatus,
+        props: {
+          allowClear: true,
+          options: lastConsumerStatusList,
+          dropdownMatchSelectWidth: false,
+        },
+      },
+      {
+        type: 'select',
+        name: 'mqType',
+        label: i18n.t('meta.Consume.MQType'),
+        initialValue: defaultValues.mqType,
+        props: {
+          allowClear: true,
+          options: consumes.filter(x => x.value),
+          dropdownMatchSelectWidth: false,
+        },
+      },
+    ],
+    [consumes],
+  );
+
   return (
     <PageContainer useDefaultBreadcrumb={false} useDefaultContainer={false}>
       <Container>
@@ -104,7 +161,7 @@ const Comp: React.FC = () => {
           <HighTable
             suffix={
               <Button type="primary" onClick={() => history.push('/consume/create')}>
-                {t('pages.ConsumeDashboard.NewConsume')}
+                {i18n.t('pages.ConsumeCreate.NewSubscribe')}
               </Button>
             }
             filterForm={{
@@ -112,7 +169,7 @@ const Comp: React.FC = () => {
               onFilter,
             }}
             table={{
-              columns: getColumns({ onDelete }),
+              columns,
               rowKey: 'id',
               dataSource: data?.list,
               pagination,

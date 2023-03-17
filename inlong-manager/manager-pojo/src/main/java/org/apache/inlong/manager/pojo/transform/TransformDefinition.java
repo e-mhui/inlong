@@ -18,13 +18,17 @@
 package org.apache.inlong.manager.pojo.transform;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.apache.inlong.manager.common.enums.TransformType;
 
 /**
  * A class to define operation to transform.
  */
 @Data
+@NoArgsConstructor
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, visible = true, property = "transformType")
 public abstract class TransformDefinition {
 
     protected TransformType transformType;

@@ -62,6 +62,15 @@ public class PulsarSource extends StreamSource {
     @ApiModelProperty("Primary key, needed when serialization type is csv, json, avro")
     private String primaryKey;
 
+    @ApiModelProperty(value = "Data encoding format: UTF-8, GBK")
+    private String dataEncoding;
+
+    @ApiModelProperty(value = "Data separator")
+    private String dataSeparator;
+
+    @ApiModelProperty(value = "Data field escape symbol")
+    private String dataEscapeChar;
+
     @ApiModelProperty("Configure the Source's startup mode. "
             + "Available options are earliest, latest, external-subscription, and specific-offsets.")
     @Builder.Default
@@ -69,6 +78,10 @@ public class PulsarSource extends StreamSource {
 
     @Builder.Default
     private boolean isInlongComponent = false;
+
+    @ApiModelProperty("Whether wrap content with InlongMsg")
+    @Builder.Default
+    private boolean wrapWithInlongMsg = true;
 
     public PulsarSource() {
         this.setSourceType(SourceType.PULSAR);

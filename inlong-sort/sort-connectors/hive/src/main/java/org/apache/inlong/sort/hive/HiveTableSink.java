@@ -76,6 +76,8 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormat;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.inlong.sort.base.dirty.DirtyOptions;
+import org.apache.inlong.sort.base.dirty.sink.DirtySink;
 import org.apache.inlong.sort.hive.filesystem.StreamingSink;
 import org.apache.orc.TypeDescription;
 import org.apache.thrift.TException;
@@ -118,8 +120,10 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
     private LinkedHashMap<String, String> staticPartitionSpec = new LinkedHashMap<>();
     private boolean overwrite = false;
     private boolean dynamicGrouping = false;
-    private String inLongMetric;
-    private String auditHostAndPorts;
+    private final String inlongMetric;
+    private final String auditHostAndPorts;
+    private final DirtyOptions dirtyOptions;
+    private @Nullable final DirtySink<Object> dirtySink;
 
     public HiveTableSink(
             ReadableConfig flinkConf,
@@ -127,8 +131,10 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
             ObjectIdentifier identifier,
             CatalogTable table,
             @Nullable Integer configuredParallelism,
-            final String inLongMetric,
-            final String auditHostAndPorts) {
+            final String inlongMetric,
+            final String auditHostAndPorts,
+            DirtyOptions dirtyOptions,
+            @Nullable DirtySink<Object> dirtySink) {
         this.flinkConf = flinkConf;
         this.jobConf = jobConf;
         this.identifier = identifier;
@@ -140,16 +146,17 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
         hiveShim = HiveShimLoader.loadHiveShim(hiveVersion);
         tableSchema = TableSchemaUtils.getPhysicalSchema(table.getSchema());
         this.configuredParallelism = configuredParallelism;
-        this.inLongMetric = inLongMetric;
+        this.inlongMetric = inlongMetric;
         this.auditHostAndPorts = auditHostAndPorts;
+        this.dirtyOptions = dirtyOptions;
+        this.dirtySink = dirtySink;
     }
 
     @Override
     public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
         DataStructureConverter converter =
                 context.createDataStructureConverter(tableSchema.toRowDataType());
-        return (DataStreamSinkProvider)
-                dataStream -> consume(dataStream, context.isBounded(), converter);
+        return (DataStreamSinkProvider) dataStream -> consume(dataStream, context.isBounded(), converter);
     }
 
     private DataStreamSink<?> consume(
@@ -161,7 +168,7 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
             dbName = identifier.getDatabaseName();
         }
         try (HiveMetastoreClientWrapper client =
-                     HiveMetastoreClientFactory.create(HiveConfUtils.create(jobConf), hiveVersion)) {
+                HiveMetastoreClientFactory.create(HiveConfUtils.create(jobConf), hiveVersion)) {
 
             Table table = client.getTable(dbName, identifier.getObjectName());
             StorageDescriptor sd = table.getSd();
@@ -303,9 +310,9 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
             if (bulkFactory.isPresent()) {
                 builder =
                         StreamingFileSink.forBulkFormat(
-                                        path,
-                                        new FileSystemTableSink.ProjectionBulkFactory(
-                                                bulkFactory.get(), partComputer))
+                                path,
+                                new FileSystemTableSink.ProjectionBulkFactory(
+                                        bulkFactory.get(), partComputer))
                                 .withBucketAssigner(assigner)
                                 .withRollingPolicy(rollingPolicy)
                                 .withOutputFileConfig(outputFileConfig);
@@ -339,8 +346,10 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
                             createCompactReaderFactory(sd, tableProps),
                             compactionSize,
                             parallelism,
-                            inLongMetric,
-                            auditHostAndPorts);
+                            inlongMetric,
+                            auditHostAndPorts,
+                            dirtyOptions,
+                            dirtySink);
         } else {
             writerStream =
                     StreamingSink.writer(
@@ -348,8 +357,10 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
                             bucketCheckInterval,
                             builder,
                             parallelism,
-                            inLongMetric,
-                            auditHostAndPorts);
+                            inlongMetric,
+                            auditHostAndPorts,
+                            dirtyOptions,
+                            dirtySink);
         }
 
         return StreamingSink.sink(
@@ -383,8 +394,7 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
         return new HadoopFileSystemFactory(jobConf);
     }
 
-    private BucketsBuilder<RowData, String, ? extends BucketsBuilder<RowData, ?, ?>>
-    bucketsBuilderForMRWriter(
+    private BucketsBuilder<RowData, String, ? extends BucketsBuilder<RowData, ?, ?>> bucketsBuilderForMRWriter(
             HiveWriterFactory recordWriterFactory,
             StorageDescriptor sd,
             TableBucketAssigner assigner,
@@ -393,8 +403,8 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
         HiveBulkWriterFactory hadoopBulkFactory = new HiveBulkWriterFactory(recordWriterFactory);
         return new HadoopPathBasedBulkFormatBuilder<>(
                 new Path(sd.getLocation()), hadoopBulkFactory, jobConf, assigner)
-                .withRollingPolicy(rollingPolicy)
-                .withOutputFileConfig(outputFileConfig);
+                        .withRollingPolicy(rollingPolicy)
+                        .withOutputFileConfig(outputFileConfig);
     }
 
     private Optional<BulkWriter.Factory<RowData>> createBulkWriterFactory(
@@ -492,8 +502,10 @@ public class HiveTableSink implements DynamicTableSink, SupportsPartitioning, Su
                         identifier,
                         catalogTable,
                         configuredParallelism,
-                        inLongMetric,
-                        auditHostAndPorts);
+                        inlongMetric,
+                        auditHostAndPorts,
+                        dirtyOptions,
+                        dirtySink);
         sink.staticPartitionSpec = staticPartitionSpec;
         sink.overwrite = overwrite;
         sink.dynamicGrouping = dynamicGrouping;

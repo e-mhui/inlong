@@ -25,44 +25,30 @@ import HighTable from '@/components/HighTable';
 import { PageContainer } from '@/components/PageContainer';
 import { defaultSize } from '@/configs/pagination';
 import { useRequest } from '@/hooks';
-import { Clusters } from '@/metas/clusters';
+import { useDefaultMeta, useLoadMeta, ClusterMetaType } from '@/metas';
 import CreateModal from './CreateModal';
 import request from '@/utils/request';
 import { timestampFormat } from '@/utils';
 
-const getFilterFormContent = defaultValues => [
-  {
-    type: 'inputsearch',
-    name: 'keyword',
-  },
-  {
-    type: 'radiobutton',
-    name: 'type',
-    label: i18n.t('pages.Clusters.Type'),
-    initialValue: defaultValues.type,
-    props: {
-      buttonStyle: 'solid',
-      options: Clusters.map(item => ({
-        label: item.label,
-        value: item.value,
-      })),
-    },
-  },
-];
-
 const Comp: React.FC = () => {
+  const { defaultValue, options: clusters } = useDefaultMeta('cluster');
+
   const [options, setOptions] = useState({
     keyword: '',
     pageSize: defaultSize,
     pageNum: 1,
-    type: Clusters[0].value,
+    type: defaultValue,
   });
 
   const [createModal, setCreateModal] = useState<Record<string, unknown>>({
     visible: false,
   });
 
-  const { data, loading, run: getList } = useRequest(
+  const {
+    data,
+    loading,
+    run: getList,
+  } = useRequest(
     {
       url: '/cluster/list',
       method: 'POST',
@@ -118,49 +104,67 @@ const Comp: React.FC = () => {
     total: data?.total,
   };
 
-  const columns = useMemo(() => {
-    const current = Clusters.find(item => item.value === options.type);
-    if (!current?.tableColumns) return [];
-
-    return current.tableColumns
-      .map(item => ({
-        ...item,
-        ellipsisMulti: 2,
-      }))
-      .concat([
-        {
-          title: i18n.t('pages.Clusters.LastModifier'),
-          dataIndex: 'modifier',
-          width: 150,
-          render: (text, record: any) => (
-            <>
-              <div>{text}</div>
-              <div>{record.modifyTime && timestampFormat(record.modifyTime)}</div>
-            </>
-          ),
+  const getFilterFormContent = useCallback(
+    defaultValues => [
+      {
+        type: 'inputsearch',
+        name: 'keyword',
+      },
+      {
+        type: 'select',
+        name: 'type',
+        label: i18n.t('pages.Clusters.Type'),
+        initialValue: defaultValues.type,
+        props: {
+          dropdownMatchSelectWidth: false,
+          options: clusters,
         },
-        {
-          title: i18n.t('basic.Operating'),
-          dataIndex: 'action',
-          width: 200,
-          render: (text, record) => (
-            <>
-              {record.type === 'DATAPROXY' && (
-                <Link to={`/clusters/node?type=${record.type}&clusterId=${record.id}`}>
-                  {i18n.t('pages.Clusters.Node.Name')}
-                </Link>
-              )}
-              <Button type="link" onClick={() => onEdit(record)}>
-                {i18n.t('basic.Edit')}
-              </Button>
-              <Button type="link" onClick={() => onDelete(record)}>
-                {i18n.t('basic.Delete')}
-              </Button>
-            </>
-          ),
-        } as any,
-      ]);
-  }, [options.type, onDelete]);
+      },
+    ],
+    [clusters],
+  );
+
+  const { Entity } = useLoadMeta<ClusterMetaType>('cluster', options.type);
+
+  const entityColumns = useMemo(() => {
+    return Entity ? new Entity().renderList() : [];
+  }, [Entity]);
+
+  const columns = useMemo(() => {
+    return entityColumns?.concat([
+      {
+        title: i18n.t('pages.Clusters.LastModifier'),
+        dataIndex: 'modifier',
+        width: 150,
+        render: (text, record: any) => (
+          <>
+            <div>{text}</div>
+            <div>{record.modifyTime && timestampFormat(record.modifyTime)}</div>
+          </>
+        ),
+      },
+      {
+        title: i18n.t('basic.Operating'),
+        dataIndex: 'action',
+        width: 200,
+        render: (text, record) => (
+          <>
+            {(record.type === 'DATAPROXY' || record.type === 'AGENT') && (
+              <Link to={`/clusters/node?type=${record.type}&clusterId=${record.id}`}>
+                {i18n.t('pages.Clusters.Node.Name')}
+              </Link>
+            )}
+            <Button type="link" onClick={() => onEdit(record)}>
+              {i18n.t('basic.Edit')}
+            </Button>
+            <Button type="link" onClick={() => onDelete(record)}>
+              {i18n.t('basic.Delete')}
+            </Button>
+          </>
+        ),
+      } as any,
+    ]);
+  }, [entityColumns, onDelete]);
 
   return (
     <PageContainer useDefaultBreadcrumb={false}>
@@ -186,6 +190,7 @@ const Comp: React.FC = () => {
 
       <CreateModal
         {...createModal}
+        defaultType={options.type}
         visible={createModal.visible as boolean}
         onOk={async () => {
           await getList();

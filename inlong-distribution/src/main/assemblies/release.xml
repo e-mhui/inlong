@@ -151,14 +151,14 @@
             <outputDirectory>./</outputDirectory>
         </fileSet>
 
-        <!-- package InLong Standalone bin-->
+        <!-- package InLong bin-->
         <fileSet>
             <directory>../bin</directory>
             <outputDirectory>bin</outputDirectory>
             <fileMode>0755</fileMode>
             <lineEnding>unix</lineEnding>
         </fileSet>
-        <!-- package InLong Standalone conf-->
+        <!-- package InLong conf-->
         <fileSet>
             <directory>../conf</directory>
             <outputDirectory>conf</outputDirectory>
@@ -174,11 +174,17 @@
         <fileSet>
             <directory>../inlong-audit/audit-release/target/apache-inlong-audit-${project.version}-bin/sql</directory>
             <outputDirectory>../docker/docker-compose/sql</outputDirectory>
+            <excludes>
+                <exclude>apache_inlong_audit_clickhouse.sql</exclude>
+            </excludes>
         </fileSet>
         <!-- package sql file for docker compose-->
         <fileSet>
             <directory>../inlong-manager/manager-web/target/apache-inlong-manager-web-${project.version}-bin/sql</directory>
             <outputDirectory>../docker/docker-compose/sql</outputDirectory>
+            <excludes>
+                <exclude>changes-1.5.0.sql</exclude>
+            </excludes>
         </fileSet>
     </fileSets>
 

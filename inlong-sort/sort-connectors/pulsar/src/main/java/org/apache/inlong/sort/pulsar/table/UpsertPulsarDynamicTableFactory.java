@@ -1,19 +1,18 @@
 /*
- *  Licensed to the Apache Software Foundation (ASF) under one
- *  or more contributor license agreements.  See the NOTICE file
- *  distributed with this work for additional information
- *  regarding copyright ownership.  The ASF licenses this file
- *  to you under the Apache License, Version 2.0 (the
- *  "License"); you may not use this file except in compliance
- *  with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.inlong.sort.pulsar.table;
@@ -67,8 +66,9 @@ import static org.apache.flink.streaming.connectors.pulsar.table.PulsarTableOpti
 import static org.apache.flink.streaming.connectors.pulsar.table.PulsarTableOptions.createValueFormatProjection;
 import static org.apache.flink.streaming.connectors.pulsar.table.PulsarTableOptions.getPulsarProperties;
 import static org.apache.flink.table.factories.FactoryUtil.FORMAT;
+import static org.apache.inlong.sort.base.Constants.AUDIT_KEYS;
 import static org.apache.inlong.sort.base.Constants.INLONG_AUDIT;
-import static org.apache.inlong.sort.pulsar.table.Constants.INLONG_METRIC;
+import static org.apache.inlong.sort.base.Constants.INLONG_METRIC;
 
 /**
  * Upsert-Pulsar factory.
@@ -187,8 +187,9 @@ public class UpsertPulsarDynamicTableFactory implements DynamicTableSourceFactor
         String serverUrl = tableOptions.get(SERVICE_URL);
         List<String> topics = tableOptions.get(TOPIC);
         String topicPattern = tableOptions.get(TOPIC_PATTERN);
-        String inlongMetric = tableOptions.get(INLONG_METRIC);
+        String inlongMetric = tableOptions.getOptional(INLONG_METRIC).orElse(null);
         String auditHostAndPorts = tableOptions.get(INLONG_AUDIT);
+        String auditKeys = tableOptions.get(AUDIT_KEYS);
 
         return new PulsarDynamicTableSource(
                 schema.toPhysicalRowDataType(),
@@ -205,7 +206,7 @@ public class UpsertPulsarDynamicTableFactory implements DynamicTableSourceFactor
                 startupOptions,
                 true,
                 inlongMetric,
-                auditHostAndPorts);
+                auditHostAndPorts, auditKeys);
     }
 
     @Override
@@ -278,6 +279,7 @@ public class UpsertPulsarDynamicTableFactory implements DynamicTableSourceFactor
      * for insert-only format.
      */
     protected static class DecodingFormatWrapper implements DecodingFormat<DeserializationSchema<RowData>> {
+
         private static final ChangelogMode SOURCE_CHANGELOG_MODE = ChangelogMode.newBuilder()
                 .addContainedKind(RowKind.UPDATE_AFTER)
                 .addContainedKind(RowKind.DELETE)
@@ -324,6 +326,7 @@ public class UpsertPulsarDynamicTableFactory implements DynamicTableSourceFactor
      * for insert-only format.
      */
     protected static class EncodingFormatWrapper implements EncodingFormat<SerializationSchema<RowData>> {
+
         public static final ChangelogMode SINK_CHANGELOG_MODE = ChangelogMode.newBuilder()
                 .addContainedKind(RowKind.INSERT)
                 .addContainedKind(RowKind.UPDATE_AFTER)
@@ -366,4 +369,3 @@ public class UpsertPulsarDynamicTableFactory implements DynamicTableSourceFactor
         }
     }
 }
-

@@ -26,6 +26,8 @@ import org.apache.inlong.manager.common.consts.SourceType;
 import org.apache.inlong.manager.common.util.JsonTypeDefine;
 import org.apache.inlong.manager.pojo.source.SourceRequest;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * Pulsar source request
  */
@@ -53,6 +55,15 @@ public class PulsarSourceRequest extends SourceRequest {
 
     @ApiModelProperty("Primary key, needed when serialization type is csv, json, avro")
     private String primaryKey;
+
+    @ApiModelProperty(value = "Data encoding format: UTF-8, GBK")
+    private String dataEncoding = StandardCharsets.UTF_8.toString();
+
+    @ApiModelProperty(value = "Data separator")
+    private String dataSeparator = String.valueOf((int) '|');
+
+    @ApiModelProperty(value = "Data field escape symbol")
+    private String dataEscapeChar;
 
     @ApiModelProperty("Configure the Source's startup mode."
             + " Available options are earliest, latest, external-subscription, and specific-offsets.")

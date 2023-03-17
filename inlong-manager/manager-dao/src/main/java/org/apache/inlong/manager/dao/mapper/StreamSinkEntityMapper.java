@@ -17,13 +17,16 @@
 
 package org.apache.inlong.manager.dao.mapper;
 
+import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.cursor.Cursor;
+import org.apache.ibatis.mapping.ResultSetType;
 import org.apache.inlong.manager.dao.entity.StreamSinkEntity;
 import org.apache.inlong.manager.pojo.sink.SinkBriefInfo;
 import org.apache.inlong.manager.pojo.sink.SinkInfo;
 import org.apache.inlong.manager.pojo.sink.SinkPageRequest;
 import org.apache.inlong.manager.pojo.sort.standalone.SortIdInfo;
-import org.apache.inlong.manager.pojo.sort.standalone.SortSourceStreamInfo;
+import org.apache.inlong.manager.pojo.sort.standalone.SortSourceStreamSinkInfo;
 import org.apache.inlong.manager.pojo.sort.standalone.SortTaskInfo;
 import org.springframework.stereotype.Repository;
 
@@ -64,12 +67,21 @@ public interface StreamSinkEntityMapper {
     /**
      * Query valid sink list by the given group id and stream id.
      *
-     * @param groupId Inlong group id.
-     * @param streamId Inlong stream id.
-     * @param sinkName Stream sink name.
-     * @return Sink entity list.
+     * @param groupId inlong group id
+     * @param streamId inlong stream id
+     * @return stream sink entity list
      */
-    List<StreamSinkEntity> selectByRelatedId(@Param("groupId") String groupId, @Param("streamId") String streamId,
+    List<StreamSinkEntity> selectByRelatedId(@Param("groupId") String groupId, @Param("streamId") String streamId);
+
+    /**
+     * Query stream sink by the unique key.
+     *
+     * @param groupId inlong group id
+     * @param streamId inlong stream id
+     * @param sinkName stream sink name
+     * @return stream sink entity
+     */
+    StreamSinkEntity selectByUniqueKey(@Param("groupId") String groupId, @Param("streamId") String streamId,
             @Param("sinkName") String sinkName);
 
     /**
@@ -108,33 +120,44 @@ public interface StreamSinkEntityMapper {
      */
     List<SinkInfo> selectAllConfig(@Param("groupId") String groupId, @Param("idList") List<String> streamIdList);
 
+    @Options(resultSetType = ResultSetType.FORWARD_ONLY, fetchSize = Integer.MIN_VALUE)
+    Cursor<StreamSinkEntity> selectAllStreamSinks();
+
     /**
      * Select all tasks for sort-standalone
      *
      * @return All tasks
      */
-    List<SortTaskInfo> selectAllTasks();
+    @Options(resultSetType = ResultSetType.FORWARD_ONLY, fetchSize = Integer.MIN_VALUE)
+    Cursor<SortTaskInfo> selectAllTasks();
 
     /**
      * Select all id params for sort-standalone
      *
      * @return All id params
      */
-    List<SortIdInfo> selectAllIdParams();
+    @Options(resultSetType = ResultSetType.FORWARD_ONLY, fetchSize = Integer.MIN_VALUE)
+    Cursor<SortIdInfo> selectAllIdParams();
 
     /**
      * Select all streams for sort sdk.
      *
      * @return All stream info
      */
-    List<SortSourceStreamInfo> selectAllStreams();
+    @Options(resultSetType = ResultSetType.FORWARD_ONLY, fetchSize = Integer.MIN_VALUE)
+    Cursor<SortSourceStreamSinkInfo> selectAllStreams();
 
-    int updateByPrimaryKeySelective(StreamSinkEntity record);
-
-    int updateByPrimaryKey(StreamSinkEntity record);
+    int updateByIdSelective(StreamSinkEntity record);
 
     int updateStatus(StreamSinkEntity entity);
 
-    int deleteByPrimaryKey(Integer id);
+    int deleteById(Integer id);
+
+    /**
+     * Physically delete all stream sinks based on inlong group ids
+     *
+     * @return rows deleted
+     */
+    int deleteByInlongGroupIds(@Param("groupIdList") List<String> groupIdList);
 
 }

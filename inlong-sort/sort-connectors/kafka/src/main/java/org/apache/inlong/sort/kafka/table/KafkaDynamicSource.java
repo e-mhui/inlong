@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,11 +17,13 @@
 
 package org.apache.inlong.sort.kafka.table;
 
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
 import org.apache.flink.streaming.connectors.kafka.KafkaDeserializationSchema;
 import org.apache.flink.streaming.connectors.kafka.config.StartupMode;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartition;
@@ -41,13 +42,17 @@ import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.utils.DataTypeUtils;
 import org.apache.flink.util.Preconditions;
-
+import org.apache.inlong.sort.base.dirty.DirtyOptions;
+import org.apache.inlong.sort.base.dirty.sink.DirtySink;
+import org.apache.inlong.sort.kafka.FlinkKafkaConsumer;
 import org.apache.inlong.sort.kafka.table.DynamicKafkaDeserializationSchema.MetadataConverter;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -68,19 +73,28 @@ import java.util.stream.Stream;
  */
 @Internal
 public class KafkaDynamicSource
-        implements ScanTableSource, SupportsReadingMetadata, SupportsWatermarkPushDown {
+        implements
+            ScanTableSource,
+            SupportsReadingMetadata,
+            SupportsWatermarkPushDown {
 
     // --------------------------------------------------------------------------------------------
     // Mutable attributes
     // --------------------------------------------------------------------------------------------
 
-    /** Data type that describes the final output of the source. */
+    /**
+     * Data type that describes the final output of the source.
+     */
     protected DataType producedDataType;
 
-    /** Metadata that is appended at the end of a physical source row. */
+    /**
+     * Metadata that is appended at the end of a physical source row.
+     */
     protected List<String> metadataKeys;
 
-    /** Watermark strategy that is used to generate per-partition watermark. */
+    /**
+     * Watermark strategy that is used to generate per-partition watermark.
+     */
     protected @Nullable WatermarkStrategy<RowData> watermarkStrategy;
 
     // --------------------------------------------------------------------------------------------
@@ -89,35 +103,53 @@ public class KafkaDynamicSource
 
     private static final String VALUE_METADATA_PREFIX = "value.";
 
-    /** Data type to configure the formats. */
+    /**
+     * Data type to configure the formats.
+     */
     protected final DataType physicalDataType;
 
-    /** Optional format for decoding keys from Kafka. */
+    /**
+     * Optional format for decoding keys from Kafka.
+     */
     protected final @Nullable DecodingFormat<DeserializationSchema<RowData>> keyDecodingFormat;
 
-    /** Format for decoding values from Kafka. */
+    /**
+     * Format for decoding values from Kafka.
+     */
     protected final DecodingFormat<DeserializationSchema<RowData>> valueDecodingFormat;
 
-    /** Indices that determine the key fields and the target position in the produced row. */
+    /**
+     * Indices that determine the key fields and the target position in the produced row.
+     */
     protected final int[] keyProjection;
 
-    /** Indices that determine the value fields and the target position in the produced row. */
+    /**
+     * Indices that determine the value fields and the target position in the produced row.
+     */
     protected final int[] valueProjection;
 
-    /** Prefix that needs to be removed from fields when constructing the physical data type. */
+    /**
+     * Prefix that needs to be removed from fields when constructing the physical data type.
+     */
     protected final @Nullable String keyPrefix;
 
     // --------------------------------------------------------------------------------------------
     // Kafka-specific attributes
     // --------------------------------------------------------------------------------------------
 
-    /** The Kafka topics to consume. */
+    /**
+     * The Kafka topics to consume.
+     */
     protected final List<String> topics;
 
-    /** The Kafka topic pattern to consume. */
+    /**
+     * The Kafka topic pattern to consume.
+     */
     protected final Pattern topicPattern;
 
-    /** Properties for the Kafka consumer. */
+    /**
+     * Properties for the Kafka consumer.
+     */
     protected final Properties properties;
 
     /**
@@ -137,12 +169,23 @@ public class KafkaDynamicSource
      */
     protected final long startupTimestampMillis;
 
-    /** Flag to determine source mode. In upsert mode, it will keep the tombstone message. * */
+    /**
+     * Flag to determine source mode. In upsert mode, it will keep the tombstone message. *
+     */
     protected final boolean upsertMode;
 
-    protected final String inLongMetric;
+    protected final String inlongMetric;
+
+    protected final String auditKeys;
 
     protected final String auditHostAndPorts;
+
+    private final DirtyOptions dirtyOptions;
+    private @Nullable final DirtySink<String> dirtySink;
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static final Logger LOG = LoggerFactory.getLogger(KafkaDynamicSource.class);
 
     public KafkaDynamicSource(
             DataType physicalDataType,
@@ -158,8 +201,11 @@ public class KafkaDynamicSource
             Map<KafkaTopicPartition, Long> specificStartupOffsets,
             long startupTimestampMillis,
             boolean upsertMode,
-            final String inLongMetric,
-            final String auditHostAndPorts) {
+            final String inlongMetric,
+            final String auditHostAndPorts,
+            DirtyOptions dirtyOptions,
+            @Nullable DirtySink<String> dirtySink,
+            final String auditKeys) {
         // Format attributes
         this.physicalDataType =
                 Preconditions.checkNotNull(
@@ -192,8 +238,11 @@ public class KafkaDynamicSource
                         specificStartupOffsets, "Specific offsets must not be null.");
         this.startupTimestampMillis = startupTimestampMillis;
         this.upsertMode = upsertMode;
-        this.inLongMetric = inLongMetric;
+        this.inlongMetric = inlongMetric;
         this.auditHostAndPorts = auditHostAndPorts;
+        this.dirtyOptions = dirtyOptions;
+        this.dirtySink = dirtySink;
+        this.auditKeys = auditKeys;
     }
 
     @Override
@@ -214,7 +263,7 @@ public class KafkaDynamicSource
 
         final FlinkKafkaConsumer<RowData> kafkaConsumer =
                 createKafkaConsumer(keyDeserialization, valueDeserialization,
-                    producedTypeInfo, inLongMetric, auditHostAndPorts);
+                        producedTypeInfo, inlongMetric, auditHostAndPorts, auditKeys);
 
         return SourceFunctionProvider.of(kafkaConsumer, false);
     }
@@ -284,7 +333,12 @@ public class KafkaDynamicSource
                         startupMode,
                         specificStartupOffsets,
                         startupTimestampMillis,
-                        upsertMode, inLongMetric, auditHostAndPorts);
+                        upsertMode,
+                        inlongMetric,
+                        auditHostAndPorts,
+                        dirtyOptions,
+                        dirtySink,
+                        auditKeys);
         copy.producedDataType = producedDataType;
         copy.metadataKeys = metadataKeys;
         copy.watermarkStrategy = watermarkStrategy;
@@ -350,17 +404,17 @@ public class KafkaDynamicSource
             DeserializationSchema<RowData> keyDeserialization,
             DeserializationSchema<RowData> valueDeserialization,
             TypeInformation<RowData> producedTypeInfo,
-        String inlongMetric,
-        String auditHostAndPorts) {
+            String inlongMetric,
+            String auditHostAndPorts,
+            String auditKeys) {
 
         final MetadataConverter[] metadataConverters =
                 metadataKeys.stream()
                         .map(
-                                k ->
-                                        Stream.of(ReadableMetadata.values())
-                                                .filter(rm -> rm.key.equals(k))
-                                                .findFirst()
-                                                .orElseThrow(IllegalStateException::new))
+                                k -> Stream.of(ReadableMetadata.values())
+                                        .filter(rm -> rm.key.equals(k))
+                                        .findFirst()
+                                        .orElseThrow(IllegalStateException::new))
                         .map(m -> m.converter)
                         .toArray(MetadataConverter[]::new);
 
@@ -374,10 +428,10 @@ public class KafkaDynamicSource
         // adjust value format projection to include value format's metadata columns at the end
         final int[] adjustedValueProjection =
                 IntStream.concat(
-                                IntStream.of(valueProjection),
-                                IntStream.range(
-                                        keyProjection.length + valueProjection.length,
-                                        adjustedPhysicalArity))
+                        IntStream.of(valueProjection),
+                        IntStream.range(
+                                keyProjection.length + valueProjection.length,
+                                adjustedPhysicalArity))
                         .toArray();
 
         final KafkaDeserializationSchema<RowData> kafkaDeserializer =
@@ -390,13 +444,17 @@ public class KafkaDynamicSource
                         hasMetadata,
                         metadataConverters,
                         producedTypeInfo,
-                        upsertMode, inlongMetric, auditHostAndPorts);
+                        upsertMode,
+                        dirtyOptions,
+                        dirtySink);
 
         final FlinkKafkaConsumer<RowData> kafkaConsumer;
         if (topics != null) {
-            kafkaConsumer = new FlinkKafkaConsumer<>(topics, kafkaDeserializer, properties);
+            kafkaConsumer = new FlinkKafkaConsumer<>(topics, kafkaDeserializer, properties, inlongMetric,
+                    auditHostAndPorts, auditKeys);
         } else {
-            kafkaConsumer = new FlinkKafkaConsumer<>(topicPattern, kafkaDeserializer, properties);
+            kafkaConsumer = new FlinkKafkaConsumer<>(topicPattern, kafkaDeserializer, properties, inlongMetric,
+                    auditHostAndPorts, auditKeys);
         }
 
         switch (startupMode) {
@@ -446,10 +504,12 @@ public class KafkaDynamicSource
     // --------------------------------------------------------------------------------------------
 
     enum ReadableMetadata {
+
         TOPIC(
                 "topic",
                 DataTypes.STRING().notNull(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override
@@ -462,6 +522,7 @@ public class KafkaDynamicSource
                 "partition",
                 DataTypes.INT().notNull(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override
@@ -476,6 +537,7 @@ public class KafkaDynamicSource
                 DataTypes.MAP(DataTypes.STRING().nullable(), DataTypes.BYTES().nullable())
                         .notNull(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override
@@ -492,6 +554,7 @@ public class KafkaDynamicSource
                 "leader-epoch",
                 DataTypes.INT().nullable(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override
@@ -504,6 +567,7 @@ public class KafkaDynamicSource
                 "offset",
                 DataTypes.BIGINT().notNull(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override
@@ -516,6 +580,7 @@ public class KafkaDynamicSource
                 "timestamp",
                 DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE(3).notNull(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override
@@ -524,10 +589,60 @@ public class KafkaDynamicSource
                     }
                 }),
 
+        HEADERS_TO_JSON_STR(
+                "headers_to_json_str",
+                DataTypes.STRING().nullable(),
+                new MetadataConverter() {
+
+                    private static final long serialVersionUID = 1L;
+
+                    @Override
+                    public Object read(ConsumerRecord<?, ?> record) {
+                        Map<String, String> headerMap = new HashMap<>();
+                        for (Header header : record.headers()) {
+                            headerMap.put(header.key(),
+                                    new String(header.value(), StandardCharsets.UTF_8));
+                        }
+                        try {
+                            return StringData.fromString(MAPPER.writeValueAsString(headerMap));
+                        } catch (JsonProcessingException e) {
+                            LOG.warn("Failed to parse headers to json string", e);
+                            return null;
+                        }
+                    }
+                }),
+
+        KEY(
+                "key",
+                DataTypes.STRING().notNull(),
+                new MetadataConverter() {
+
+                    private static final long serialVersionUID = 1L;
+
+                    @Override
+                    public Object read(ConsumerRecord<?, ?> record) {
+                        return StringData.fromBytes((byte[]) record.key());
+                    }
+                }),
+
+        VALUE(
+                "value",
+                DataTypes.STRING().notNull(),
+                new MetadataConverter() {
+
+                    private static final long serialVersionUID = 1L;
+
+                    @Override
+                    public Object read(ConsumerRecord<?, ?> record) {
+                        return StringData.fromBytes((byte[]) record.value());
+                    }
+                }),
+
         TIMESTAMP_TYPE(
                 "timestamp-type",
                 DataTypes.STRING().notNull(),
                 new MetadataConverter() {
+
                     private static final long serialVersionUID = 1L;
 
                     @Override

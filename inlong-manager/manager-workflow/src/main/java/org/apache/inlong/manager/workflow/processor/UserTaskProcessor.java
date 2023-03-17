@@ -24,13 +24,14 @@ import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.inlong.manager.common.enums.TaskEvent;
 import org.apache.inlong.manager.common.enums.TaskStatus;
 import org.apache.inlong.manager.common.exceptions.JsonException;
 import org.apache.inlong.manager.common.exceptions.WorkflowException;
-import org.apache.inlong.manager.pojo.workflow.form.task.TaskForm;
 import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.dao.entity.WorkflowProcessEntity;
 import org.apache.inlong.manager.dao.entity.WorkflowTaskEntity;
+import org.apache.inlong.manager.pojo.workflow.form.task.TaskForm;
 import org.apache.inlong.manager.workflow.WorkflowAction;
 import org.apache.inlong.manager.workflow.WorkflowContext;
 import org.apache.inlong.manager.workflow.WorkflowContext.ActionContext;
@@ -38,7 +39,6 @@ import org.apache.inlong.manager.workflow.definition.Element;
 import org.apache.inlong.manager.workflow.definition.UserTask;
 import org.apache.inlong.manager.workflow.definition.WorkflowTask;
 import org.apache.inlong.manager.workflow.event.ListenerResult;
-import org.apache.inlong.manager.workflow.event.task.TaskEvent;
 import org.apache.inlong.manager.workflow.event.task.TaskEventNotifier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -62,8 +62,7 @@ public class UserTaskProcessor extends AbstractTaskProcessor<UserTask> {
             .of(WorkflowAction.APPROVE, WorkflowAction.REJECT, WorkflowAction.TRANSFER);
     private static final Set<WorkflowAction> SUPPORT_ACTIONS = ImmutableSet.of(
             WorkflowAction.APPROVE, WorkflowAction.REJECT, WorkflowAction.TRANSFER, WorkflowAction.CANCEL,
-            WorkflowAction.TERMINATE
-    );
+            WorkflowAction.TERMINATE);
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -78,7 +77,7 @@ public class UserTaskProcessor extends AbstractTaskProcessor<UserTask> {
     @Override
     public boolean create(UserTask userTask, WorkflowContext context) {
         List<String> approvers = userTask.getApproverAssign().assign(context);
-        Preconditions.checkNotEmpty(approvers, "Cannot assign approvers for task: " + userTask.getDisplayName()
+        Preconditions.expectNotEmpty(approvers, "Cannot assign approvers for task: " + userTask.getDisplayName()
                 + ", as the approvers was empty");
 
         if (!userTask.isNeedAllApprove()) {
@@ -104,11 +103,11 @@ public class UserTaskProcessor extends AbstractTaskProcessor<UserTask> {
     @Override
     public boolean complete(WorkflowContext context) {
         WorkflowContext.ActionContext actionContext = context.getActionContext();
-        Preconditions.checkTrue(SUPPORT_ACTIONS.contains(actionContext.getAction()),
+        Preconditions.expectTrue(SUPPORT_ACTIONS.contains(actionContext.getAction()),
                 "UserTask not support action:" + actionContext.getAction());
 
         WorkflowTaskEntity workflowTaskEntity = actionContext.getTaskEntity();
-        Preconditions.checkTrue(TaskStatus.PENDING.name().equalsIgnoreCase(workflowTaskEntity.getStatus()),
+        Preconditions.expectTrue(TaskStatus.PENDING.name().equalsIgnoreCase(workflowTaskEntity.getStatus()),
                 "task status should be pending");
 
         checkOperator(actionContext);
@@ -157,7 +156,7 @@ public class UserTaskProcessor extends AbstractTaskProcessor<UserTask> {
         taskEntity.setStartTime(new Date());
 
         taskEntityMapper.insert(taskEntity);
-        Preconditions.checkNotNull(taskEntity.getId(), "task saved failed");
+        Preconditions.expectNotNull(taskEntity.getId(), "task saved failed");
         return taskEntity;
     }
 
@@ -169,8 +168,7 @@ public class UserTaskProcessor extends AbstractTaskProcessor<UserTask> {
 
         boolean operatorIsApprover = ArrayUtils.contains(
                 workflowTaskEntity.getApprovers().split(WorkflowTaskEntity.APPROVERS_DELIMITER),
-                actionContext.getOperator()
-        );
+                actionContext.getOperator());
 
         if (!operatorIsApprover) {
             throw new WorkflowException(
@@ -191,13 +189,13 @@ public class UserTaskProcessor extends AbstractTaskProcessor<UserTask> {
         try {
             TaskForm taskForm = actionContext.getForm();
             if (needForm(userTask, actionContext.getAction())) {
-                Preconditions.checkNotNull(taskForm, "form cannot be null");
-                Preconditions.checkTrue(taskForm.getClass().isAssignableFrom(userTask.getFormClass()),
+                Preconditions.expectNotNull(taskForm, "form cannot be null");
+                Preconditions.expectTrue(taskForm.getClass().isAssignableFrom(userTask.getFormClass()),
                         "form type not match, should be class " + userTask.getFormClass());
                 taskForm.validate();
                 taskEntity.setFormData(objectMapper.writeValueAsString(taskForm));
             } else {
-                Preconditions.checkNull(taskForm, "no form required");
+                Preconditions.expectNull(taskForm, "no form required");
             }
             taskEntity.setEndTime(new Date());
 

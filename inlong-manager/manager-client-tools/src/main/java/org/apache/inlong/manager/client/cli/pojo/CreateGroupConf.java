@@ -18,6 +18,7 @@
 package org.apache.inlong.manager.client.cli.pojo;
 
 import lombok.Data;
+import org.apache.inlong.manager.client.api.transform.MultiDependencyTransform;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.sink.StreamSink;
 import org.apache.inlong.manager.pojo.source.StreamSource;
@@ -34,6 +35,7 @@ public class CreateGroupConf {
 
     private InlongGroupInfo groupInfo;
     private InlongStreamInfo streamInfo;
+    private MultiDependencyTransform streamTransform;
     private List<StreamField> streamFieldList;
     private StreamSource streamSource;
     private StreamSink streamSink;

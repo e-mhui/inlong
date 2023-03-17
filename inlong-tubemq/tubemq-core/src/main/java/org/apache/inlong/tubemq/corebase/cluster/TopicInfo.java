@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -34,8 +34,8 @@ public class TopicInfo implements Serializable {
     private boolean acceptSubscribe;
 
     public TopicInfo(final BrokerInfo broker, final String topic,
-                     final int partitionNum, final int topicStoreNum,
-                     final boolean acceptPublish, final boolean acceptSubscribe) {
+            final int partitionNum, final int topicStoreNum,
+            final boolean acceptPublish, final boolean acceptSubscribe) {
         this.broker = broker;
         this.topic = topic;
         this.partitionNum = partitionNum;
@@ -47,6 +47,10 @@ public class TopicInfo implements Serializable {
 
     public BrokerInfo getBroker() {
         return broker;
+    }
+
+    public int getBrokerId() {
+        return broker.getBrokerId();
     }
 
     public String getTopic() {
@@ -74,7 +78,8 @@ public class TopicInfo implements Serializable {
     }
 
     // return result <isChanged, isScaleOut>
-    public Tuple2<Boolean, Boolean> updAndJudgeTopicInfo(TopicInfo newTopicInfo) {
+    public void updAndJudgeTopicInfo(TopicInfo newTopicInfo,
+            Tuple2<Boolean, Boolean> result) {
         boolean isChanged = false;
         if (this.acceptPublish != newTopicInfo.acceptPublish) {
             isChanged = true;
@@ -84,7 +89,7 @@ public class TopicInfo implements Serializable {
             isChanged = true;
             this.acceptSubscribe = newTopicInfo.acceptSubscribe;
         }
-        return new Tuple2<>(isChanged, (this.partitionNum != newTopicInfo.partitionNum
+        result.setF0AndF1(isChanged, (this.partitionNum != newTopicInfo.partitionNum
                 || this.topicStoreNum != newTopicInfo.topicStoreNum));
     }
 
@@ -96,12 +101,23 @@ public class TopicInfo implements Serializable {
         return this.simpleValue;
     }
 
-    public StringBuilder toStrBuilderString(final StringBuilder sBuilder) {
+    public StringBuilder toStrBuilderString(StringBuilder sBuilder) {
         return sBuilder.append(broker.toString()).append(TokenConstants.SEGMENT_SEP)
                 .append(this.topic).append(TokenConstants.ATTR_SEP)
                 .append(this.partitionNum).append(TokenConstants.ATTR_SEP)
                 .append(this.acceptPublish).append(TokenConstants.ATTR_SEP)
                 .append(this.acceptSubscribe).append(TokenConstants.ATTR_SEP)
+                .append(this.topicStoreNum);
+    }
+
+    public StringBuilder toStrBuilderString(boolean acceptPub,
+            boolean acceptSub,
+            StringBuilder sBuilder) {
+        return sBuilder.append(broker.toString()).append(TokenConstants.SEGMENT_SEP)
+                .append(this.topic).append(TokenConstants.ATTR_SEP)
+                .append(this.partitionNum).append(TokenConstants.ATTR_SEP)
+                .append((acceptPub && this.acceptPublish)).append(TokenConstants.ATTR_SEP)
+                .append((acceptSub && this.acceptSubscribe)).append(TokenConstants.ATTR_SEP)
                 .append(this.topicStoreNum);
     }
 

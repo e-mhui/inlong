@@ -17,16 +17,18 @@
 
 package org.apache.inlong.manager.pojo.group.pulsar;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
+import org.apache.inlong.manager.common.util.CommonBeanUtils;
+import org.apache.inlong.manager.common.util.JsonUtils;
+import org.apache.inlong.manager.pojo.group.BaseInlongGroup;
 
 import javax.validation.constraints.NotNull;
 
@@ -37,10 +39,12 @@ import javax.validation.constraints.NotNull;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(callSuper = true)
 @ApiModel("Inlong group info for Pulsar")
-public class InlongPulsarDTO {
+public class InlongPulsarDTO extends BaseInlongGroup {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper(); // thread safe
+    @ApiModelProperty(value = "Pulsar tenant")
+    private String tenant;
 
     @ApiModelProperty(value = "Queue model, parallel: multiple partitions, high throughput, out-of-order messages;"
             + "serial: single partition, low throughput, and orderly messages")
@@ -80,19 +84,7 @@ public class InlongPulsarDTO {
      * Get the dto instance from the request
      */
     public static InlongPulsarDTO getFromRequest(InlongPulsarRequest request) {
-        return InlongPulsarDTO.builder()
-                .queueModule(request.getQueueModule())
-                .partitionNum(request.getPartitionNum())
-                .ensemble(request.getEnsemble())
-                .writeQuorum(request.getWriteQuorum())
-                .ackQuorum(request.getAckQuorum())
-                .retentionTime(request.getRetentionTime())
-                .retentionTimeUnit(request.getRetentionTimeUnit())
-                .retentionSize(request.getRetentionSize())
-                .retentionSizeUnit(request.getRetentionSizeUnit())
-                .ttl(request.getTtl())
-                .ttlUnit(request.getTtlUnit())
-                .build();
+        return CommonBeanUtils.copyProperties(request, InlongPulsarDTO::new, true);
     }
 
     /**
@@ -100,10 +92,10 @@ public class InlongPulsarDTO {
      */
     public static InlongPulsarDTO getFromJson(@NotNull String extParams) {
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, InlongPulsarDTO.class);
+            return JsonUtils.parseObject(extParams, InlongPulsarDTO.class);
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.GROUP_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.GROUP_INFO_INCORRECT,
+                    String.format("parse extParams of Pulsar failure: %s", e.getMessage()));
         }
     }
 

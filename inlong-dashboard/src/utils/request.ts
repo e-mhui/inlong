@@ -17,27 +17,32 @@
  * under the License.
  */
 
-import { message as Message } from 'antd';
 import { extend } from 'umi-request';
 import { RequestOptionsInit } from 'umi-request/types';
 import nprogress from 'nprogress';
 import { config } from '@/configs/default';
 import requestConcurrentMiddleware from './requestConcurrentMiddleware';
+import 'nprogress/nprogress.css';
 
 export interface FetchOptions extends RequestOptionsInit {
   url: string;
   fetchType?: 'FETCH' | 'JSONP';
 }
 
+export interface SuccessResponse {
+  success: boolean;
+  data: any;
+  errMsg: string;
+}
+
 export interface RequestOptions extends FetchOptions {
   // Do not use global request error prompt (http request is successful, but the returned result has a backend error)
   noGlobalError?: boolean;
+  responseParse?: (res: any) => SuccessResponse;
 }
 
-export const apiPrefix = '/inlong/manager/api';
-
 const extendRequest = extend({
-  prefix: apiPrefix,
+  prefix: config.requestPrefix,
   timeout: 60 * 1000,
 });
 
@@ -70,15 +75,22 @@ const fetch = (options: FetchOptions) => {
 };
 
 export default function request(_options: RequestOptions | string) {
-  const options = typeof _options === 'string' ? { url: _options } : _options;
+  const opts = typeof _options === 'string' ? { url: _options } : _options;
+  const { noGlobalError, responseParse, ...options } = opts;
   nprogress.start();
   return fetch(options)
     .then((response: any) => {
-      const { success, data, errMsg: message } = response;
+      const {
+        success,
+        data,
+        errMsg: message,
+      } = responseParse
+        ? responseParse(response)
+        : config.responseParse?.(response) || (response as SuccessResponse);
 
       // Request 200, but the result is wrong
       if (!success) {
-        if (options.noGlobalError) {
+        if (noGlobalError) {
           return Promise.resolve(response);
         }
 
@@ -101,7 +113,7 @@ export default function request(_options: RequestOptions | string) {
         msg = message || status;
       }
 
-      if (msg) Message.error(msg);
+      if (msg) config.requestErrorAlert(msg);
       return Promise.reject(new Error(msg));
     })
     .finally(() => {

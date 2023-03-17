@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -24,9 +24,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.commons.codec.binary.StringUtils;
+import org.apache.inlong.tubemq.corebase.rv.ProcessResult;
 import org.apache.inlong.tubemq.corebase.utils.ConcurrentHashSet;
 import org.apache.inlong.tubemq.corebase.utils.Tuple2;
-import org.apache.inlong.tubemq.server.common.paramcheck.ParamCheckResult;
 import org.apache.inlong.tubemq.server.common.utils.RowLock;
 import org.apache.inlong.tubemq.server.master.MasterConfig;
 import org.apache.inlong.tubemq.server.master.TMaster;
@@ -38,8 +38,8 @@ public class ConsumerInfoHolder {
 
     private static final Logger logger =
             LoggerFactory.getLogger(ConsumerInfoHolder.class);
-    private final MasterConfig masterConfig;     // master configure
-    private final RowLock groupRowLock;    //lock
+    private final MasterConfig masterConfig; // master configure
+    private final RowLock groupRowLock; // lock
     private final ConcurrentHashMap<String/* group */, ConsumeGroupInfo> groupInfoMap =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String/* consumerId */, String/* group */> consumerIndexMap =
@@ -49,8 +49,8 @@ public class ConsumerInfoHolder {
     private final ConcurrentHashSet<String/* group */> clientBalanceGroupSet =
             new ConcurrentHashSet<>();
     // topic-group map
-    private final ConcurrentHashMap<String/* topic */, ConcurrentHashSet<String>> topicGroupMap
-            = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String/* topic */, ConcurrentHashSet<String>> topicGroupMap =
+            new ConcurrentHashMap<>();
 
     public ConsumerInfoHolder(TMaster tMaster) {
         this.masterConfig = tMaster.getMasterConfig();
@@ -221,7 +221,7 @@ public class ConsumerInfoHolder {
      * @param processList rebalanced consumer id
      */
     public void setRebNodeProcessed(String group,
-                                    List<String> processList) {
+            List<String> processList) {
         if (group == null) {
             return;
         }
@@ -347,12 +347,12 @@ public class ConsumerInfoHolder {
      *
      * @param consumer consumer info
      * @param isNotAllocated whether balanced
-     * @param sBuffer  string buffer
+     * @param strBuff  string buffer
      * @param result   check result
      * @return process result
      */
     public boolean addConsumer(ConsumerInfo consumer, boolean isNotAllocated,
-                               StringBuilder sBuffer, ParamCheckResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         ConsumeGroupInfo consumeGroupInfo;
         String group = consumer.getGroupName();
         Integer lid = null;
@@ -372,7 +372,7 @@ public class ConsumerInfoHolder {
                     }
                     // add topic-group map information
                     ConcurrentHashSet<String> groupSet;
-                    for (String topicName: consumeGroupInfo.getTopicSet()) {
+                    for (String topicName : consumeGroupInfo.getTopicSet()) {
                         groupSet = topicGroupMap.get(topicName);
                         if (groupSet == null) {
                             ConcurrentHashSet<String> tmpGroupSet = new ConcurrentHashSet<>();
@@ -388,8 +388,8 @@ public class ConsumerInfoHolder {
                             consumeGroupInfo.isClientBalance());
                 }
             }
-            if (consumeGroupInfo.addConsumer(consumer, sBuffer, result)) {
-                if ((Boolean) result.checkData) {
+            if (consumeGroupInfo.addConsumer(consumer, strBuff, result)) {
+                if ((Boolean) result.getRetData()) {
                     MasterSrvStatsHolder.incConsumerCnt(false,
                             consumeGroupInfo.isClientBalance());
                 }
@@ -397,7 +397,7 @@ public class ConsumerInfoHolder {
                     consumeGroupInfo.settAllocated();
                 }
                 consumerIndexMap.put(consumer.getConsumerId(), group);
-                result.setCheckData(consumeGroupInfo);
+                result.setSuccResult(consumeGroupInfo);
             }
         } catch (IOException e) {
             logger.warn("Failed to lock.", e);
@@ -406,7 +406,7 @@ public class ConsumerInfoHolder {
                 groupRowLock.releaseRowLock(lid);
             }
         }
-        return result.result;
+        return result.isSuccess();
     }
 
     /**
@@ -442,7 +442,7 @@ public class ConsumerInfoHolder {
                     }
                     // remove topic-group map information
                     ConcurrentHashSet<String> groupSet;
-                    for (String topicName: consumeGroupInfo.getTopicSet()) {
+                    for (String topicName : consumeGroupInfo.getTopicSet()) {
                         groupSet = topicGroupMap.get(topicName);
                         if (groupSet == null) {
                             continue;

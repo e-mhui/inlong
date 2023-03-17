@@ -26,6 +26,7 @@ import org.apache.inlong.manager.common.enums.ProcessStatus;
 import org.apache.inlong.manager.common.enums.TaskStatus;
 import org.apache.inlong.manager.common.exceptions.FormParseException;
 import org.apache.inlong.manager.common.exceptions.JsonException;
+import org.apache.inlong.manager.common.util.JsonUtils;
 import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.dao.entity.WorkflowEventLogEntity;
 import org.apache.inlong.manager.dao.entity.WorkflowProcessEntity;
@@ -53,7 +54,6 @@ import java.util.Arrays;
  */
 public class WorkflowUtils {
 
-    public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Logger LOGGER = LoggerFactory.getLogger(WorkflowUtils.class);
 
     /**
@@ -111,10 +111,10 @@ public class WorkflowUtils {
                 .build();
         try {
             if (StringUtils.isNotBlank(entity.getFormData())) {
-                processResponse.setFormData(OBJECT_MAPPER.readTree(entity.getFormData()));
+                processResponse.setFormData(JsonUtils.parseTree(entity.getFormData()));
             }
             if (StringUtils.isNotBlank(entity.getExtParams())) {
-                processResponse.setExtParams(OBJECT_MAPPER.readTree(entity.getExtParams()));
+                processResponse.setExtParams(JsonUtils.parseTree(entity.getExtParams()));
             }
         } catch (Exception e) {
             LOGGER.error("parse process form error: ", e);
@@ -152,7 +152,7 @@ public class WorkflowUtils {
         try {
             JsonNode formData = null;
             if (StringUtils.isNotBlank(taskEntity.getFormData())) {
-                formData = OBJECT_MAPPER.readTree(taskEntity.getFormData());
+                formData = JsonUtils.parseTree(taskEntity.getFormData());
             }
             taskResponse.setFormData(formData);
         } catch (Exception e) {
@@ -168,7 +168,7 @@ public class WorkflowUtils {
      */
     public static <T extends ProcessForm> T parseProcessForm(ObjectMapper objectMapper, String form,
             WorkflowProcess process) {
-        Preconditions.checkNotNull(process, "process cannot be null");
+        Preconditions.expectNotNull(process, "process cannot be null");
         if (StringUtils.isEmpty(form)) {
             return null;
         }
@@ -187,15 +187,15 @@ public class WorkflowUtils {
      */
     public static <T extends TaskForm> T parseTaskForm(ObjectMapper objectMapper, WorkflowTaskEntity taskEntity,
             WorkflowProcess process) {
-        Preconditions.checkNotNull(taskEntity, "taskEntity cannot be null");
-        Preconditions.checkNotNull(process, "process cannot be null");
+        Preconditions.expectNotNull(taskEntity, "taskEntity cannot be null");
+        Preconditions.expectNotNull(process, "process cannot be null");
         if (StringUtils.isEmpty(taskEntity.getFormData())) {
             return null;
         }
 
         WorkflowTask task = process.getTaskByName(taskEntity.getName());
-        Preconditions.checkNotNull(task, "user task not exist " + taskEntity.getName());
-        Preconditions.checkTrue(task instanceof UserTask, "task should be userTask " + taskEntity.getName());
+        Preconditions.expectNotNull(task, "user task not exist " + taskEntity.getName());
+        Preconditions.expectTrue(task instanceof UserTask, "task should be userTask " + taskEntity.getName());
 
         UserTask userTask = (UserTask) task;
         try {

@@ -17,6 +17,9 @@
 
 package org.apache.inlong.tubemq.manager.service;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.inlong.tubemq.manager.repository.TopicRepository;
 import org.apache.inlong.tubemq.manager.service.interfaces.NodeService;
@@ -41,13 +44,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Component
 @Slf4j
-public class TopicBackendWorker implements DisposableBean, Runnable  {
+public class TopicBackendWorker implements DisposableBean, Runnable {
+
     // old code, stop first
     private final AtomicBoolean runFlag = new AtomicBoolean(false);
     private final ConcurrentHashMap<Integer, BlockingQueue<TopicFuture>> pendingTopics =
             new ConcurrentHashMap<>();
     private final AtomicInteger notSatisfiedCount = new AtomicInteger(0);
     private final NodeService nodeService;
+    private final ScheduledExecutorService workerExecutor;
 
     @Autowired
     private TopicRepository topicRepository;
@@ -66,10 +71,11 @@ public class TopicBackendWorker implements DisposableBean, Runnable  {
     private int queueMaxRunningSize;
 
     TopicBackendWorker() {
-        Thread thread = new Thread(this);
-        // daemon thread
-        thread.setDaemon(true);
-        thread.start();
+        ThreadFactoryBuilder factoryBuilder = new ThreadFactoryBuilder();
+        this.workerExecutor = Executors
+                .newSingleThreadScheduledExecutor(
+                        factoryBuilder.setNameFormat("tubemq-manager-topic-backend-worker").build());
+        workerExecutor.schedule(this, queueThreadInterval, TimeUnit.SECONDS);
         nodeService = new NodeServiceImpl(this);
     }
 
@@ -121,11 +127,10 @@ public class TopicBackendWorker implements DisposableBean, Runnable  {
     @Override
     public void run() {
         log.info("TopicBackendWorker has started");
-        while (runFlag.get()) {
+        if (runFlag.get()) {
             try {
                 batchAddTopic();
                 checkTopicFromDB();
-                TimeUnit.SECONDS.sleep(queueThreadInterval);
             } catch (Exception exception) {
                 log.warn("exception caught", exception);
             }
@@ -136,5 +141,6 @@ public class TopicBackendWorker implements DisposableBean, Runnable  {
     public void destroy() throws Exception {
         runFlag.set(false);
         nodeService.close();
+        this.workerExecutor.shutdown();
     }
 }

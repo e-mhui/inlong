@@ -17,67 +17,60 @@
  * under the License.
  */
 
-import React, { useState, useMemo, forwardRef } from 'react';
-import { Button, Modal, message } from 'antd';
+import React, { useState, useMemo, forwardRef, useCallback } from 'react';
+import { Badge, Button, Card, Modal, List, Tag, Radio, message } from 'antd';
+import { PaginationConfig } from 'antd/lib/pagination';
+import {
+  UnorderedListOutlined,
+  TableOutlined,
+  EditOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons';
 import HighTable from '@/components/HighTable';
 import { defaultSize } from '@/configs/pagination';
 import { useRequest } from '@/hooks';
 import i18n from '@/i18n';
 import DetailModal from './DetailModal';
-import { Sinks } from '@/metas/sinks';
+import { useDefaultMeta, useLoadMeta, SinkMetaType } from '@/metas';
 import request from '@/utils/request';
+import { pickObjectArray } from '@/utils';
 import { CommonInterface } from '../common';
-import { statusList, genStatusTag } from './status';
+import { sinks } from '@/metas/sinks';
 
-type Props = CommonInterface;
+interface Props extends CommonInterface {
+  inlongStreamId?: string;
+}
 
-const getFilterFormContent = defaultValues => [
-  {
-    type: 'inputsearch',
-    name: 'keyword',
-  },
-  {
-    type: 'select',
-    name: 'sinkType',
-    label: i18n.t('pages.GroupDetail.Sink.Type'),
-    initialValue: defaultValues.sinkType,
-    props: {
-      dropdownMatchSelectWidth: false,
-      options: Sinks.map(item => ({
-        label: item.label,
-        value: item.value,
-      })),
-    },
-  },
-  {
-    type: 'select',
-    name: 'status',
-    label: i18n.t('basic.Status'),
-    props: {
-      allowClear: true,
-      options: statusList,
-    },
-  },
-];
+const Comp = ({ inlongGroupId, inlongStreamId, readonly }: Props, ref) => {
+  const [mode, setMode] = useState('list');
 
-const Comp = ({ inlongGroupId, readonly }: Props, ref) => {
-  const [options, setOptions] = useState({
-    keyword: '',
+  const { defaultValue } = useDefaultMeta('sink');
+
+  const defaultOptions = {
+    // keyword: '',
     pageSize: defaultSize,
     pageNum: 1,
-    sinkType: Sinks[0].value,
-  });
+    sinkType: defaultValue,
+  };
+
+  const [options, setOptions] = useState(defaultOptions);
 
   const [createModal, setCreateModal] = useState<Record<string, unknown>>({
     visible: false,
   });
 
-  const { data, loading, run: getList } = useRequest(
+  const {
+    data,
+    loading,
+    run: getList,
+  } = useRequest(
     {
       url: '/sink/list',
-      params: {
+      method: 'POST',
+      data: {
         ...options,
         inlongGroupId,
+        inlongStreamId,
       },
     },
     {
@@ -85,26 +78,30 @@ const Comp = ({ inlongGroupId, readonly }: Props, ref) => {
     },
   );
 
-  const onEdit = ({ id }) => {
+  const onEdit = useCallback(({ id }) => {
     setCreateModal({ visible: true, id });
-  };
+  }, []);
 
-  const onDelete = ({ id }) => {
-    Modal.confirm({
-      title: i18n.t('basic.DeleteConfirm'),
-      onOk: async () => {
-        await request({
-          url: `/sink/delete/${id}`,
-          method: 'DELETE',
-          params: {
-            sinkType: options.sinkType,
-          },
-        });
-        await getList();
-        message.success(i18n.t('basic.DeleteSuccess'));
-      },
-    });
-  };
+  const onDelete = useCallback(
+    ({ id }) => {
+      Modal.confirm({
+        title: i18n.t('basic.DeleteConfirm'),
+        onOk: async () => {
+          await request({
+            url: `/sink/delete/${id}`,
+            method: 'DELETE',
+            params: {
+              sinkType: options.sinkType,
+              startProcess: false,
+            },
+          });
+          await getList();
+          message.success(i18n.t('basic.DeleteSuccess'));
+        },
+      });
+    },
+    [getList, options.sinkType],
+  );
 
   const onChange = ({ current: pageNum, pageSize }) => {
     setOptions(prev => ({
@@ -122,37 +119,41 @@ const Comp = ({ inlongGroupId, readonly }: Props, ref) => {
     }));
   };
 
-  const pagination = {
+  const pagination: PaginationConfig = {
     pageSize: options.pageSize,
     current: options.pageNum,
     total: data?.total,
+    simple: true,
+    size: 'small',
   };
 
-  const columnsMap = useMemo(
-    () =>
-      Sinks.reduce(
-        (acc, cur) => ({
-          ...acc,
-          [cur.value]: cur.tableColumns,
-        }),
-        {},
-      ),
-    [],
+  const { Entity } = useLoadMeta<SinkMetaType>('sink', options.sinkType);
+
+  const entityColumns = useMemo(() => {
+    return Entity ? new Entity().renderList() : [];
+  }, [Entity]);
+
+  const entityFields = useMemo(() => {
+    return Entity ? new Entity().renderRow() : [];
+  }, [Entity]);
+
+  const getFilterFormContent = useCallback(
+    defaultValues => [
+      {
+        type: 'inputsearch',
+        name: 'keyword',
+      },
+      ...pickObjectArray(['sinkType', 'status'], entityFields).map(item => ({
+        ...item,
+        visible: true,
+        initialValue: defaultValues[item.name],
+      })),
+    ],
+    [entityFields],
   );
 
-  const columns = [
-    {
-      title: i18n.t('pages.GroupDetail.Sink.DataStreams'),
-      dataIndex: 'inlongStreamId',
-    },
-  ]
-    .concat(columnsMap[options.sinkType])
-    .concat([
-      {
-        title: i18n.t('basic.Status'),
-        dataIndex: 'status',
-        render: text => genStatusTag(text),
-      },
+  const columns = useMemo(() => {
+    return entityColumns?.concat([
       {
         title: i18n.t('basic.Operating'),
         dataIndex: 'action',
@@ -171,34 +172,89 @@ const Comp = ({ inlongGroupId, readonly }: Props, ref) => {
           ),
       } as any,
     ]);
+  }, [entityColumns, onDelete, onEdit, readonly]);
 
   return (
     <>
-      <HighTable
-        filterForm={{
-          content: getFilterFormContent(options),
-          onFilter,
-        }}
-        suffix={
+      <Card
+        size="small"
+        title={
+          <Badge size="small" count={data?.total} offset={[15, 0]}>
+            {i18n.t('pages.GroupDetail.Sinks')}
+          </Badge>
+        }
+        style={{ height: '100%' }}
+        extra={[
           !readonly && (
-            <Button type="primary" onClick={() => setCreateModal({ visible: true })}>
+            <Button key="create" type="link" onClick={() => setCreateModal({ visible: true })}>
               {i18n.t('pages.GroupDetail.Sink.New')}
             </Button>
-          )
-        }
-        table={{
-          columns,
-          rowKey: 'id',
-          dataSource: data?.list,
-          pagination,
-          loading,
-          onChange,
-        }}
-      />
-
+          ),
+          <Radio.Group
+            key="mode"
+            onChange={e => {
+              setMode(e.target.value);
+              setOptions(defaultOptions);
+            }}
+            defaultValue={mode}
+            size="small"
+          >
+            <Radio.Button value="list">
+              <UnorderedListOutlined />
+            </Radio.Button>
+            <Radio.Button value="table">
+              <TableOutlined />
+            </Radio.Button>
+          </Radio.Group>,
+        ]}
+      >
+        {mode === 'list' ? (
+          <List
+            size="small"
+            loading={loading}
+            dataSource={data?.list as Record<string, any>[]}
+            pagination={pagination}
+            renderItem={item => (
+              <List.Item
+                actions={[
+                  <Button key="edit" type="link" onClick={() => onEdit(item)}>
+                    <EditOutlined />
+                  </Button>,
+                  <Button key="del" type="link" onClick={() => onDelete(item)}>
+                    <DeleteOutlined />
+                  </Button>,
+                ]}
+              >
+                <span>
+                  <span style={{ marginRight: 10 }}>{item.sinkName}</span>
+                  <Tag>{sinks.find(c => c.value === item.sinkType)?.label}</Tag>
+                </span>
+              </List.Item>
+            )}
+          />
+        ) : (
+          <HighTable
+            filterForm={{
+              content: getFilterFormContent(options),
+              onFilter,
+            }}
+            table={{
+              columns,
+              rowKey: 'id',
+              size: 'small',
+              dataSource: data?.list,
+              pagination,
+              loading,
+              onChange,
+            }}
+          />
+        )}
+      </Card>
       <DetailModal
         {...createModal}
+        defaultType={options.sinkType}
         inlongGroupId={inlongGroupId}
+        inlongStreamId={inlongStreamId}
         visible={createModal.visible as boolean}
         onOk={async () => {
           await getList();

@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,15 +17,23 @@
 
 package org.apache.inlong.sort.cdc.debezium.internal;
 
+import com.ververica.cdc.connectors.mysql.source.utils.RecordUtils;
 import io.debezium.connector.SnapshotRecord;
 import io.debezium.data.Envelope;
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
+import io.debezium.relational.history.TableChanges.TableChange;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.util.Collector;
-import org.apache.inlong.sort.cdc.debezium.DebeziumDeserializationSchema;
+import org.apache.inlong.sort.cdc.base.debezium.DebeziumDeserializationSchema;
+import org.apache.inlong.sort.cdc.base.debezium.history.FlinkJsonTableChangeSerializer;
+import org.apache.inlong.sort.cdc.base.debezium.internal.DebeziumOffset;
+import org.apache.inlong.sort.cdc.base.debezium.internal.DebeziumOffsetSerializer;
+import org.apache.inlong.sort.cdc.base.debezium.internal.FlinkDatabaseSchemaHistory;
+import org.apache.inlong.sort.cdc.base.debezium.internal.Handover;
+import org.apache.inlong.sort.cdc.base.debezium.internal.SchemaRecord;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -230,7 +237,7 @@ public class DebeziumChangeFetcher<T> {
                 continue;
             }
 
-            deserialization.deserialize(record, debeziumCollector);
+            deserialization.deserialize(record, debeziumCollector, getTableChange(record));
 
             if (!isSnapshotRecord(record)) {
                 LOG.debug("Snapshot phase finishes.");
@@ -241,6 +248,13 @@ public class DebeziumChangeFetcher<T> {
             emitRecordsUnderCheckpointLock(
                     debeziumCollector.records, record.sourcePartition(), record.sourceOffset());
         }
+    }
+
+    private TableChange getTableChange(SourceRecord record) {
+        SchemaRecord schemaRecord = FlinkDatabaseSchemaHistory.latestTables.get(RecordUtils.getTableId(
+                record));
+        return FlinkJsonTableChangeSerializer.fromDocument(
+                schemaRecord.toDocument(), true);
     }
 
     private void emitRecordsUnderCheckpointLock(

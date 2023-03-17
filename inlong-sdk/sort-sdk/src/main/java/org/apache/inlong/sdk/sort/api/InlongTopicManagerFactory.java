@@ -13,12 +13,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.apache.inlong.sdk.sort.api;
 
 import org.apache.inlong.sdk.sort.api.SortClientConfig.TopicType;
+import org.apache.inlong.sdk.sort.manager.InlongMultiTopicManager;
 import org.apache.inlong.sdk.sort.manager.InlongSingleTopicManager;
 
 /**
@@ -32,9 +32,12 @@ public class InlongTopicManagerFactory {
             ClientContext context,
             QueryConsumeConfig queryConsumeConfig) {
         switch (type) {
-            case SINGLE_TOPIC: return createSingleTopicManager(context, queryConsumeConfig);
-            case MULTI_TOPIC: return createMultiTopicManager(context, queryConsumeConfig);
-            default: return createSingleTopicManager(context, queryConsumeConfig);
+            case SINGLE_TOPIC:
+                return createSingleTopicManager(context, queryConsumeConfig);
+            case MULTI_TOPIC:
+                return createMultiTopicManager(context, queryConsumeConfig);
+            default:
+                return createSingleTopicManager(context, queryConsumeConfig);
         }
     }
 
@@ -47,6 +50,6 @@ public class InlongTopicManagerFactory {
     public static TopicManager createMultiTopicManager(
             ClientContext context,
             QueryConsumeConfig queryConsumeConfig) {
-        return null;
+        return new InlongMultiTopicManager(context, queryConsumeConfig);
     }
 }

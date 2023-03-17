@@ -17,8 +17,6 @@
 
 package org.apache.inlong.manager.pojo.sink.es;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,6 +26,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
 import org.apache.inlong.manager.common.util.AESUtils;
+import org.apache.inlong.manager.common.util.JsonUtils;
 
 import javax.validation.constraints.NotNull;
 import java.nio.charset.StandardCharsets;
@@ -42,13 +41,8 @@ import java.util.Map;
 @AllArgsConstructor
 public class ElasticsearchSinkDTO {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     @ApiModelProperty("Host of the Elasticsearch server")
-    private String host;
-
-    @ApiModelProperty("Port of the Elasticsearch server")
-    private Integer port;
+    private String hosts;
 
     @ApiModelProperty("Username of the Elasticsearch server")
     private String username;
@@ -90,16 +84,7 @@ public class ElasticsearchSinkDTO {
      * Get the dto instance from the request
      */
     public static ElasticsearchSinkDTO getFromRequest(ElasticsearchSinkRequest request) throws Exception {
-        Integer encryptVersion = AESUtils.getCurrentVersion(null);
-        String passwd = null;
-        if (StringUtils.isNotEmpty(request.getPassword())) {
-            passwd = AESUtils.encryptToString(request.getPassword().getBytes(StandardCharsets.UTF_8),
-                    encryptVersion);
-        }
         return ElasticsearchSinkDTO.builder()
-                .host(request.getHost())
-                .username(request.getUsername())
-                .password(passwd)
                 .indexName(request.getIndexName())
                 .flushInterval(request.getFlushInterval())
                 .flushRecord(request.getFlushRecord())
@@ -107,7 +92,6 @@ public class ElasticsearchSinkDTO {
                 .documentType(request.getDocumentType())
                 .primaryKey(request.getPrimaryKey())
                 .esVersion(request.getEsVersion())
-                .encryptVersion(encryptVersion)
                 .properties(request.getProperties())
                 .build();
     }
@@ -117,10 +101,10 @@ public class ElasticsearchSinkDTO {
      */
     public static ElasticsearchSinkDTO getFromJson(@NotNull String extParams) {
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, ElasticsearchSinkDTO.class).decryptPassword();
+            return JsonUtils.parseObject(extParams, ElasticsearchSinkDTO.class).decryptPassword();
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT,
+                    String.format("parse extParams of Elasticsearch SinkDTO failure: %s", e.getMessage()));
         }
     }
 

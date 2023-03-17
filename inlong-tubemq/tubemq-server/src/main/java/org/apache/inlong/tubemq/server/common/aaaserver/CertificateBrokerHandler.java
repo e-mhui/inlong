@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -20,6 +20,7 @@ package org.apache.inlong.tubemq.server.common.aaaserver;
 import java.util.Set;
 import org.apache.inlong.tubemq.corebase.protobuf.generated.ClientBroker;
 import org.apache.inlong.tubemq.corebase.protobuf.generated.ClientMaster;
+import org.apache.inlong.tubemq.corebase.rv.ProcessResult;
 
 public interface CertificateBrokerHandler {
 
@@ -27,15 +28,15 @@ public interface CertificateBrokerHandler {
 
     void appendVisitToken(ClientMaster.MasterBrokerAuthorizedInfo authorizedInfo);
 
-    CertifiedResult identityValidUserInfo(ClientBroker.AuthorizedInfo authorizedInfo,
-                                          boolean isProduce);
+    boolean identityValidUserInfo(ClientBroker.AuthorizedInfo authorizedInfo,
+            boolean isProduce, ProcessResult result);
 
-    CertifiedResult validProduceAuthorizeInfo(String userName, String topicName,
-                                              String msgType, String clientIp);
+    boolean validProduceAuthorizeInfo(String userName, String topicName,
+            String msgType, String clientIp, ProcessResult result);
 
-    CertifiedResult validConsumeAuthorizeInfo(String userName, String groupName,
-                                              String topicName, Set<String> msgTypeLst,
-                                              boolean isRegister, String clientIp);
+    boolean validConsumeAuthorizeInfo(String userName, String groupName,
+            String topicName, Set<String> msgTypeLst,
+            boolean isRegister, String clientIp, ProcessResult result);
 
     boolean isEnableProduceAuthenticate();
 

@@ -22,11 +22,10 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
-import org.apache.inlong.manager.common.enums.DataSeparator;
-import org.apache.inlong.manager.common.enums.FileFormat;
 import org.apache.inlong.manager.common.consts.SinkType;
-import org.apache.inlong.manager.pojo.sink.SinkRequest;
+import org.apache.inlong.manager.common.enums.FileFormat;
 import org.apache.inlong.manager.common.util.JsonTypeDefine;
+import org.apache.inlong.manager.pojo.sink.SinkRequest;
 
 import javax.validation.constraints.NotBlank;
 import java.nio.charset.StandardCharsets;
@@ -42,7 +41,6 @@ import java.util.List;
 @JsonTypeDefine(value = SinkType.HIVE)
 public class HiveSinkRequest extends SinkRequest {
 
-    @NotBlank(message = "jdbcUrl cannot be blank")
     @ApiModelProperty("Hive JDBC URL, such as jdbc:hive2://${ip}:${port}")
     private String jdbcUrl;
 
@@ -60,7 +58,6 @@ public class HiveSinkRequest extends SinkRequest {
     @ApiModelProperty("Target table name")
     private String tableName;
 
-    @NotBlank(message = "dataPath cannot be blank")
     @ApiModelProperty("Data path, such as: hdfs://ip:port/user/hive/warehouse/test.db")
     private String dataPath;
 
@@ -79,8 +76,8 @@ public class HiveSinkRequest extends SinkRequest {
     @ApiModelProperty("Data encoding format: UTF-8, GBK")
     private String dataEncoding = StandardCharsets.UTF_8.toString();
 
-    @ApiModelProperty("Data separator, stored as ASCII code")
-    private String dataSeparator = DataSeparator.SOH.getSeparator();
+    @ApiModelProperty("Data separator")
+    private String dataSeparator = String.valueOf((int) '\001');
 
     @ApiModelProperty("Version for Hive, such as: 3.2.1")
     private String hiveVersion;

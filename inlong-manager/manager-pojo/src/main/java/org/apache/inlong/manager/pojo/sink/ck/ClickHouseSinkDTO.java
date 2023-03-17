@@ -17,8 +17,6 @@
 
 package org.apache.inlong.manager.pojo.sink.ck;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,11 +26,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
 import org.apache.inlong.manager.common.util.AESUtils;
+import org.apache.inlong.manager.common.util.JsonUtils;
 
 import javax.validation.constraints.NotNull;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Sink info of ClickHouse
@@ -42,8 +42,6 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ClickHouseSinkDTO {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @ApiModelProperty("JDBC URL of the ClickHouse server")
     private String jdbcUrl;
@@ -75,8 +73,7 @@ public class ClickHouseSinkDTO {
     @ApiModelProperty("Partition strategy, support: BALANCE, RANDOM, HASH")
     private String partitionStrategy;
 
-    @ApiModelProperty(value = "Partition files, separate with commas",
-            notes = "Necessary when partitionStrategy is HASH, must be one of the field list")
+    @ApiModelProperty(value = "Partition files, separate with commas", notes = "Necessary when partitionStrategy is HASH, must be one of the field list")
     private String partitionFields;
 
     @ApiModelProperty("Key field names, separate with commas")
@@ -90,6 +87,12 @@ public class ClickHouseSinkDTO {
 
     @ApiModelProperty("Table order information")
     private String orderBy;
+
+    @ApiModelProperty(value = "Message time-to-live duration")
+    private Integer ttl;
+
+    @ApiModelProperty(value = "The unit of message's time-to-live duration")
+    private String ttlUnit;
 
     @ApiModelProperty("Table primary key")
     private String primaryKey;
@@ -125,6 +128,8 @@ public class ClickHouseSinkDTO {
                 .keyFieldNames(request.getKeyFieldNames())
                 .engine(request.getEngine())
                 .partitionBy(request.getPartitionBy())
+                .ttl(request.getTtl())
+                .ttlUnit(request.getTtlUnit())
                 .primaryKey(request.getPrimaryKey())
                 .orderBy(request.getOrderBy())
                 .encryptVersion(encryptVersion)
@@ -134,15 +139,16 @@ public class ClickHouseSinkDTO {
 
     public static ClickHouseSinkDTO getFromJson(@NotNull String extParams) {
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, ClickHouseSinkDTO.class).decryptPassword();
+            return Objects.requireNonNull(JsonUtils.parseObject(
+                    extParams, ClickHouseSinkDTO.class)).decryptPassword();
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT,
+                    String.format("parse extParams of ClickHouse Sink failure: %s", e.getMessage()));
         }
     }
 
     public static ClickHouseTableInfo getClickHouseTableInfo(ClickHouseSinkDTO ckInfo,
-            List<ClickHouseColumnInfo> columnList) {
+            List<ClickHouseFieldInfo> fieldInfoList) {
         ClickHouseTableInfo tableInfo = new ClickHouseTableInfo();
         tableInfo.setDbName(ckInfo.getDbName());
         tableInfo.setTableName(ckInfo.getTableName());
@@ -150,7 +156,9 @@ public class ClickHouseSinkDTO {
         tableInfo.setOrderBy(ckInfo.getOrderBy());
         tableInfo.setPartitionBy(ckInfo.getPartitionBy());
         tableInfo.setPrimaryKey(ckInfo.getPrimaryKey());
-        tableInfo.setColumns(columnList);
+        tableInfo.setTtl(ckInfo.getTtl());
+        tableInfo.setTtlUnit(ckInfo.getTtlUnit());
+        tableInfo.setFieldInfoList(fieldInfoList);
 
         return tableInfo;
     }

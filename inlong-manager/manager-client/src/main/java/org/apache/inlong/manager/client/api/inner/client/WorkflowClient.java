@@ -18,9 +18,7 @@
 package org.apache.inlong.manager.client.api.inner.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.github.pagehelper.PageInfo;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.inlong.manager.client.api.ClientConfiguration;
@@ -28,6 +26,7 @@ import org.apache.inlong.manager.client.api.service.WorkflowApi;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
 import org.apache.inlong.manager.common.util.JsonUtils;
 import org.apache.inlong.manager.common.util.Preconditions;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.common.Response;
 import org.apache.inlong.manager.pojo.workflow.ProcessDetailResponse;
 import org.apache.inlong.manager.pojo.workflow.ProcessRequest;
@@ -47,7 +46,6 @@ import java.util.Map;
 public class WorkflowClient {
 
     private final WorkflowApi workflowApi;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public WorkflowClient(ClientConfiguration configuration) {
         workflowApi = ClientUtils.createRetrofit(configuration).create(WorkflowApi.class);
@@ -61,11 +59,11 @@ public class WorkflowClient {
      * @return workflow result info
      */
     public WorkflowResult startInlongGroup(int taskId, ApplyGroupProcessForm groupProcessForm) {
-        ObjectNode workflowTaskOperation = objectMapper.createObjectNode();
+        ObjectNode workflowTaskOperation = JsonUtils.OBJECT_MAPPER.createObjectNode();
         workflowTaskOperation.putPOJO("transferTo", Lists.newArrayList());
         workflowTaskOperation.put("remark", "approved by system");
 
-        ObjectNode groupApproveForm = objectMapper.createObjectNode();
+        ObjectNode groupApproveForm = JsonUtils.OBJECT_MAPPER.createObjectNode();
         groupApproveForm.putPOJO("groupApproveInfo", groupProcessForm.getGroupInfo());
         groupApproveForm.putPOJO("streamApproveInfoList", groupProcessForm.getStreamInfoList());
         groupApproveForm.put("formName", "InlongGroupApproveForm");
@@ -90,8 +88,8 @@ public class WorkflowClient {
      * @return workflow result info
      */
     public WorkflowResult start(WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(request.getName(), "process name cannot be null");
-        Preconditions.checkNotNull(request.getForm(), "form cannot be null");
+        Preconditions.expectNotNull(request.getName(), "process name cannot be null");
+        Preconditions.expectNotNull(request.getForm(), "form cannot be null");
 
         Response<WorkflowResult> response = ClientUtils.executeHttpCall(workflowApi.start(request));
         ClientUtils.assertRespSuccess(response);
@@ -106,7 +104,7 @@ public class WorkflowClient {
      * @return workflow result info
      */
     public WorkflowResult cancel(Integer processId, WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(processId, "process id cannot be null");
+        Preconditions.expectNotNull(processId, "process id cannot be null");
 
         Response<WorkflowResult> response = ClientUtils.executeHttpCall(workflowApi.cancel(processId, request));
         ClientUtils.assertRespSuccess(response);
@@ -121,7 +119,7 @@ public class WorkflowClient {
      * @return workflow result info
      */
     public WorkflowResult continueProcess(Integer processId, WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(processId, "process id cannot be null");
+        Preconditions.expectNotNull(processId, "process id cannot be null");
 
         Response<WorkflowResult> response = ClientUtils.executeHttpCall(
                 workflowApi.continueProcess(processId, request));
@@ -137,7 +135,7 @@ public class WorkflowClient {
      * @return workflow result info
      */
     public WorkflowResult reject(Integer taskId, WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(taskId, "task id cannot be null");
+        Preconditions.expectNotNull(taskId, "task id cannot be null");
 
         Response<WorkflowResult> response = ClientUtils.executeHttpCall(workflowApi.reject(taskId, request));
         ClientUtils.assertRespSuccess(response);
@@ -152,7 +150,7 @@ public class WorkflowClient {
      * @return workflow result info
      */
     public WorkflowResult complete(Integer taskId, WorkflowOperationRequest request) {
-        Preconditions.checkNotNull(taskId, "task id cannot be null");
+        Preconditions.expectNotNull(taskId, "task id cannot be null");
 
         Response<WorkflowResult> response = ClientUtils.executeHttpCall(workflowApi.complete(taskId, request));
         ClientUtils.assertRespSuccess(response);
@@ -167,7 +165,7 @@ public class WorkflowClient {
      * @return process detail response
      */
     public ProcessDetailResponse detail(Integer processId, Integer taskId) {
-        Preconditions.checkNotNull(processId, "process id cannot be null");
+        Preconditions.expectNotNull(processId, "process id cannot be null");
 
         Response<ProcessDetailResponse> response = ClientUtils.executeHttpCall(workflowApi.detail(processId, taskId));
         ClientUtils.assertRespSuccess(response);
@@ -180,13 +178,14 @@ public class WorkflowClient {
      * @param request workflow process request
      * @return process response list
      */
-    public PageInfo<ProcessResponse> listProcess(ProcessRequest request) {
-        Preconditions.checkNotNull(request, "process request cannot be null");
+    public PageResult<ProcessResponse> listProcess(ProcessRequest request) {
+        Preconditions.expectNotNull(request, "process request cannot be null");
 
         Map<String, Object> requestMap = JsonUtils.OBJECT_MAPPER.convertValue(request,
                 new TypeReference<Map<String, Object>>() {
                 });
-        Response<PageInfo<ProcessResponse>> response = ClientUtils.executeHttpCall(workflowApi.listProcess(requestMap));
+        Response<PageResult<ProcessResponse>> response = ClientUtils.executeHttpCall(
+                workflowApi.listProcess(requestMap));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }
@@ -197,13 +196,13 @@ public class WorkflowClient {
      * @param request workflow task query request
      * @return task response list
      */
-    public PageInfo<TaskResponse> listTask(TaskRequest request) {
-        Preconditions.checkNotNull(request, "task request cannot be null");
+    public PageResult<TaskResponse> listTask(TaskRequest request) {
+        Preconditions.expectNotNull(request, "task request cannot be null");
 
         Map<String, Object> requestMap = JsonUtils.OBJECT_MAPPER.convertValue(request,
                 new TypeReference<Map<String, Object>>() {
                 });
-        Response<PageInfo<TaskResponse>> response = ClientUtils.executeHttpCall(workflowApi.listTask(requestMap));
+        Response<PageResult<TaskResponse>> response = ClientUtils.executeHttpCall(workflowApi.listTask(requestMap));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }

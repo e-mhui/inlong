@@ -17,11 +17,12 @@
 
 package org.apache.inlong.manager.client.api.inner.client;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.service.UserApi;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.util.Preconditions;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.common.Response;
 import org.apache.inlong.manager.pojo.user.UserInfo;
 import org.apache.inlong.manager.pojo.user.UserRequest;
@@ -55,8 +56,9 @@ public class UserClient {
      * @return user id after saving
      */
     public Integer register(UserRequest userInfo) {
-        Preconditions.checkNotEmpty(userInfo.getName(), "username cannot be empty");
-        Preconditions.checkNotEmpty(userInfo.getPassword(), "password cannot be empty");
+        Preconditions.expectNotBlank(userInfo.getName(), ErrorCodeEnum.INVALID_PARAMETER, "username cannot be empty");
+        Preconditions.expectNotBlank(userInfo.getPassword(), ErrorCodeEnum.INVALID_PARAMETER,
+                "password cannot be empty");
 
         Response<Integer> response = ClientUtils.executeHttpCall(userApi.register(userInfo));
         ClientUtils.assertRespSuccess(response);
@@ -70,9 +72,23 @@ public class UserClient {
      * @return user info
      */
     public UserInfo getById(Integer id) {
-        Preconditions.checkNotNull(id, "user id cannot be null");
+        Preconditions.expectNotNull(id, "user id cannot be null");
 
         Response<UserInfo> response = ClientUtils.executeHttpCall(userApi.getById(id));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData();
+    }
+
+    /**
+     * Get user info by username
+     *
+     * @param name username
+     * @return user info
+     */
+    public UserInfo getByName(String name) {
+        Preconditions.expectNotBlank(name, ErrorCodeEnum.INVALID_PARAMETER, "username cannot be null");
+
+        Response<UserInfo> response = ClientUtils.executeHttpCall(userApi.getByName(name));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }
@@ -83,10 +99,10 @@ public class UserClient {
      * @param request request
      * @return user info list
      */
-    public PageInfo<UserInfo> list(UserRequest request) {
-        Preconditions.checkNotNull(request, "request cannot be null");
+    public PageResult<UserInfo> list(UserRequest request) {
+        Preconditions.expectNotNull(request, "request cannot be null");
 
-        Response<PageInfo<UserInfo>> response = ClientUtils.executeHttpCall(userApi.list(request));
+        Response<PageResult<UserInfo>> response = ClientUtils.executeHttpCall(userApi.list(request));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }
@@ -98,8 +114,8 @@ public class UserClient {
      * @return user id
      */
     public Integer update(UserRequest userInfo) {
-        Preconditions.checkNotNull(userInfo, "userinfo cannot be null");
-        Preconditions.checkNotNull(userInfo.getId(), "user id cannot be null");
+        Preconditions.expectNotNull(userInfo, "userinfo cannot be null");
+        Preconditions.expectNotNull(userInfo.getId(), "user id cannot be null");
 
         Response<Integer> response = ClientUtils.executeHttpCall(userApi.update(userInfo));
         ClientUtils.assertRespSuccess(response);
@@ -113,7 +129,7 @@ public class UserClient {
      * @return whether succeed
      */
     public Boolean delete(Integer id) {
-        Preconditions.checkNotNull(id, "user id cannot be null");
+        Preconditions.expectNotNull(id, "user id cannot be null");
 
         Response<Boolean> response = ClientUtils.executeHttpCall(userApi.delete(id));
         ClientUtils.assertRespSuccess(response);

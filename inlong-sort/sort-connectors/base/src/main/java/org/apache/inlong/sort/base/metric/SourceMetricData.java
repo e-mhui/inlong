@@ -1,33 +1,39 @@
 /*
- *   Licensed to the Apache Software Foundation (ASF) under one
- *   or more contributor license agreements.  See the NOTICE file
- *   distributed with this work for additional information
- *   regarding copyright ownership.  The ASF licenses this file
- *   to you under the Apache License, Version 2.0 (the
- *   "License"); you may not use this file except in compliance
- *   with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *       http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *   Unless required by applicable law or agreed to in writing, software
- *   distributed under the License is distributed on an "AS IS" BASIS,
- *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *   See the License for the specific language governing permissions and
- *   limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.inlong.sort.base.metric;
 
+import java.util.List;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.metrics.SimpleCounter;
-import org.apache.inlong.audit.AuditImp;
-import org.apache.inlong.sort.base.Constants;
+import org.apache.inlong.audit.AuditOperator;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.inlong.sort.base.Constants.NUM_BYTES_IN;
+import static org.apache.inlong.sort.base.Constants.NUM_BYTES_IN_FOR_METER;
 import static org.apache.inlong.sort.base.Constants.NUM_BYTES_IN_PER_SECOND;
 import static org.apache.inlong.sort.base.Constants.NUM_RECORDS_IN;
+import static org.apache.inlong.sort.base.Constants.NUM_RECORDS_IN_FOR_METER;
 import static org.apache.inlong.sort.base.Constants.NUM_RECORDS_IN_PER_SECOND;
 
 /**
@@ -35,27 +41,78 @@ import static org.apache.inlong.sort.base.Constants.NUM_RECORDS_IN_PER_SECOND;
  */
 public class SourceMetricData implements MetricData {
 
+    private static final Logger LOG = LoggerFactory.getLogger(SourceMetricData.class);
     private final MetricGroup metricGroup;
-    private final String groupId;
-    private final String streamId;
-    private final String nodeId;
+    private final Map<String, String> labels;
     private Counter numRecordsIn;
     private Counter numBytesIn;
+    private Counter numRecordsInForMeter;
+    private Counter numBytesInForMeter;
     private Meter numRecordsInPerSecond;
     private Meter numBytesInPerSecond;
-    private final AuditImp auditImp;
+    private AuditOperator auditOperator;
+    private List<Integer> auditKeys;
 
-    public SourceMetricData(String groupId, String streamId, String nodeId, MetricGroup metricGroup) {
-        this(groupId, streamId, nodeId, metricGroup, null);
+    public SourceMetricData(MetricOption option, MetricGroup metricGroup) {
+        this.metricGroup = metricGroup;
+        this.labels = option.getLabels();
+
+        ThreadSafeCounter recordsInCounter = new ThreadSafeCounter();
+        ThreadSafeCounter bytesInCounter = new ThreadSafeCounter();
+        switch (option.getRegisteredMetric()) {
+            default:
+                recordsInCounter.inc(option.getInitRecords());
+                bytesInCounter.inc(option.getInitBytes());
+                registerMetricsForNumRecordsIn(recordsInCounter);
+                registerMetricsForNumBytesIn(bytesInCounter);
+                registerMetricsForNumBytesInForMeter(new ThreadSafeCounter());
+                registerMetricsForNumRecordsInForMeter(new ThreadSafeCounter());
+                registerMetricsForNumBytesInPerSecond();
+                registerMetricsForNumRecordsInPerSecond();
+                break;
+        }
+
+        if (option.getIpPorts().isPresent()) {
+            AuditOperator.getInstance().setAuditProxy(option.getIpPortList());
+            this.auditOperator = AuditOperator.getInstance();
+            this.auditKeys = option.getInlongAuditKeys();
+        }
     }
 
-    public SourceMetricData(String groupId, String streamId, String nodeId, MetricGroup metricGroup,
-            AuditImp auditImp) {
-        this.groupId = groupId;
-        this.streamId = streamId;
-        this.nodeId = nodeId;
-        this.metricGroup = metricGroup;
-        this.auditImp = auditImp;
+    /**
+     * Default counter is {@link SimpleCounter}
+     * groupId and streamId and nodeId are label value, user can use it filter metric data when use metric reporter
+     * prometheus
+     */
+    public void registerMetricsForNumRecordsInForMeter() {
+        registerMetricsForNumRecordsInForMeter(new SimpleCounter());
+    }
+
+    /**
+     * User can use custom counter that extends from {@link Counter}
+     * groupId and streamId and nodeId are label value, user can use it filter metric data when use metric reporter
+     * prometheus
+     */
+    public void registerMetricsForNumRecordsInForMeter(Counter counter) {
+        numRecordsInForMeter = registerCounter(NUM_RECORDS_IN_FOR_METER, counter);
+    }
+
+    /**
+     * Default counter is {@link SimpleCounter}
+     * groupId and streamId and nodeId are label value, user can use it filter metric data when use metric reporter
+     * prometheus
+     */
+    public void registerMetricsForNumBytesInForMeter() {
+        registerMetricsForNumBytesInForMeter(new SimpleCounter());
+    }
+
+    /**
+     * User can use custom counter that extends from {@link Counter}
+     * groupId and streamId and nodeId are label value, user can use it filter metric data when use metric reporter
+     * prometheus
+     */
+    public void registerMetricsForNumBytesInForMeter(Counter counter) {
+        numBytesInForMeter = registerCounter(NUM_BYTES_IN_FOR_METER, counter);
     }
 
     /**
@@ -95,11 +152,11 @@ public class SourceMetricData implements MetricData {
     }
 
     public void registerMetricsForNumRecordsInPerSecond() {
-        numRecordsInPerSecond = registerMeter(NUM_RECORDS_IN_PER_SECOND, this.numRecordsIn);
+        numRecordsInPerSecond = registerMeter(NUM_RECORDS_IN_PER_SECOND, this.numRecordsInForMeter);
     }
 
     public void registerMetricsForNumBytesInPerSecond() {
-        numBytesInPerSecond = registerMeter(NUM_BYTES_IN_PER_SECOND, this.numBytesIn);
+        numBytesInPerSecond = registerMeter(NUM_BYTES_IN_PER_SECOND, this.numBytesInForMeter);
     }
 
     public Counter getNumRecordsIn() {
@@ -118,45 +175,97 @@ public class SourceMetricData implements MetricData {
         return numBytesInPerSecond;
     }
 
+    public Counter getNumRecordsInForMeter() {
+        return numRecordsInForMeter;
+    }
+
+    public Counter getNumBytesInForMeter() {
+        return numBytesInForMeter;
+    }
+
     @Override
     public MetricGroup getMetricGroup() {
         return metricGroup;
     }
 
     @Override
-    public String getGroupId() {
-        return groupId;
+    public Map<String, String> getLabels() {
+        return labels;
     }
 
-    @Override
-    public String getStreamId() {
-        return streamId;
+    public void outputMetricsWithEstimate(Object data) {
+        long size = data.toString().getBytes(StandardCharsets.UTF_8).length;
+        outputMetrics(1, size);
     }
 
-    @Override
-    public String getNodeId() {
-        return nodeId;
+    public void outputMetricsWithEstimate(Object data, long dataTime) {
+        long size = data.toString().getBytes(StandardCharsets.UTF_8).length;
+        outputMetrics(1, size, dataTime);
     }
 
     public void outputMetrics(long rowCountSize, long rowDataSize) {
-        outputMetricForFlink(rowCountSize, rowDataSize);
-        outputMetricForAudit(rowCountSize, rowDataSize);
-    }
+        outputDefaultMetrics(rowCountSize, rowDataSize);
 
-    public void outputMetricForAudit(long rowCountSize, long rowDataSize) {
-        if (auditImp != null) {
-            auditImp.add(
-                    Constants.AUDIT_SORT_INPUT,
-                    getGroupId(),
-                    getStreamId(),
-                    System.currentTimeMillis(),
-                    rowCountSize,
-                    rowDataSize);
+        if (auditOperator != null) {
+            for (Integer key : auditKeys) {
+                auditOperator.add(
+                        key,
+                        getGroupId(),
+                        getStreamId(),
+                        System.currentTimeMillis(),
+                        rowCountSize,
+                        rowDataSize);
+            }
+
         }
     }
 
-    public void outputMetricForFlink(long rowCountSize, long rowDataSize) {
-        this.numBytesIn.inc(rowDataSize);
-        this.numRecordsIn.inc(rowCountSize);
+    public void outputMetrics(long rowCountSize, long rowDataSize, long dataTime) {
+        outputDefaultMetrics(rowCountSize, rowDataSize);
+
+        if (auditOperator != null) {
+            for (Integer key : auditKeys) {
+                auditOperator.add(
+                        key,
+                        getGroupId(),
+                        getStreamId(),
+                        dataTime,
+                        rowCountSize,
+                        rowDataSize);
+            }
+        }
+    }
+
+    private void outputDefaultMetrics(long rowCountSize, long rowDataSize) {
+        if (numRecordsIn != null) {
+            this.numRecordsIn.inc(rowCountSize);
+        }
+
+        if (numBytesIn != null) {
+            this.numBytesIn.inc(rowDataSize);
+        }
+
+        if (numRecordsInForMeter != null) {
+            this.numRecordsInForMeter.inc(rowCountSize);
+        }
+
+        if (numBytesInForMeter != null) {
+            this.numBytesInForMeter.inc(rowDataSize);
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "SourceMetricData{"
+                + "metricGroup=" + metricGroup
+                + ", labels=" + labels
+                + ", numRecordsIn=" + numRecordsIn.getCount()
+                + ", numBytesIn=" + numBytesIn.getCount()
+                + ", numRecordsInForMeter=" + numRecordsInForMeter.getCount()
+                + ", numBytesInForMeter=" + numBytesInForMeter.getCount()
+                + ", numRecordsInPerSecond=" + numRecordsInPerSecond.getRate()
+                + ", numBytesInPerSecond=" + numBytesInPerSecond.getRate()
+                + ", auditOperator=" + auditOperator
+                + '}';
     }
 }

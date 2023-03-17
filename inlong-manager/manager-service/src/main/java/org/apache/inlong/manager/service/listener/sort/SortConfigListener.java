@@ -17,20 +17,23 @@
 
 package org.apache.inlong.manager.service.listener.sort;
 
-import org.apache.inlong.manager.common.consts.InlongConstants;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.inlong.manager.common.enums.GroupOperateType;
+import org.apache.inlong.manager.common.enums.GroupStatus;
+import org.apache.inlong.manager.common.enums.TaskEvent;
 import org.apache.inlong.manager.common.exceptions.WorkflowListenerException;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamInfo;
 import org.apache.inlong.manager.pojo.workflow.form.process.GroupResourceProcessForm;
 import org.apache.inlong.manager.pojo.workflow.form.process.ProcessForm;
 import org.apache.inlong.manager.pojo.workflow.form.process.StreamResourceProcessForm;
+import org.apache.inlong.manager.service.group.InlongGroupService;
 import org.apache.inlong.manager.service.resource.sort.SortConfigOperator;
 import org.apache.inlong.manager.service.resource.sort.SortConfigOperatorFactory;
+import org.apache.inlong.manager.service.stream.InlongStreamService;
 import org.apache.inlong.manager.workflow.WorkflowContext;
 import org.apache.inlong.manager.workflow.event.ListenerResult;
 import org.apache.inlong.manager.workflow.event.task.SortOperateListener;
-import org.apache.inlong.manager.workflow.event.task.TaskEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +52,10 @@ public class SortConfigListener implements SortOperateListener {
 
     @Autowired
     private SortConfigOperatorFactory operatorFactory;
+    @Autowired
+    private InlongGroupService groupService;
+    @Autowired
+    private InlongStreamService streamService;
 
     @Override
     public TaskEvent event() {
@@ -58,24 +65,13 @@ public class SortConfigListener implements SortOperateListener {
     @Override
     public boolean accept(WorkflowContext context) {
         ProcessForm processForm = context.getProcessForm();
+        String className = processForm.getClass().getSimpleName();
         String groupId = processForm.getInlongGroupId();
-        if (processForm instanceof GroupResourceProcessForm) {
-            GroupResourceProcessForm groupResourceForm = (GroupResourceProcessForm) processForm;
-            InlongGroupInfo groupInfo = groupResourceForm.getGroupInfo();
-            boolean enable = InlongConstants.DISABLE_ZK.equals(groupInfo.getEnableZookeeper());
-
-            LOGGER.info("zookeeper disabled was [{}] for groupId [{}]", enable, groupId);
-            return enable;
-        } else if (processForm instanceof StreamResourceProcessForm) {
-            StreamResourceProcessForm streamResourceForm = (StreamResourceProcessForm) processForm;
-            InlongGroupInfo groupInfo = streamResourceForm.getGroupInfo();
-            InlongStreamInfo streamInfo = streamResourceForm.getStreamInfo();
-            boolean enable = InlongConstants.DISABLE_ZK.equals(groupInfo.getEnableZookeeper());
-            LOGGER.info("zookeeper disabled was [{}] for groupId [{}] and streamId [{}] ", enable, groupId,
-                    streamInfo.getInlongStreamId());
-            return enable;
+        if (processForm instanceof GroupResourceProcessForm || processForm instanceof StreamResourceProcessForm) {
+            LOGGER.info("accept sort config listener as the process is {} for groupId [{}]", className, groupId);
+            return true;
         } else {
-            LOGGER.info("zk disabled for groupId [{}]", groupId);
+            LOGGER.info("not accept sort config listener as the process is {} for groupId [{}]", className, groupId);
             return false;
         }
     }
@@ -88,11 +84,33 @@ public class SortConfigListener implements SortOperateListener {
 
         GroupOperateType operateType = form.getGroupOperateType();
         if (operateType == GroupOperateType.SUSPEND || operateType == GroupOperateType.DELETE) {
-            LOGGER.info("not build sort config for groupId={}, as the group operate type={}", groupId, operateType);
+            LOGGER.info("no need to build sort config for groupId={} as the operate type is {}", groupId, operateType);
             return ListenerResult.success();
         }
-        InlongGroupInfo groupInfo = form.getGroupInfo();
+        // ensure the inlong group exists
+        switch (operateType) {
+            case INIT:
+                groupService.updateStatus(groupId, GroupStatus.CONFIG_ING.getCode(), context.getOperator());
+                break;
+            case RESTART:
+                groupService.updateStatus(groupId, GroupStatus.RESTARTING.getCode(), context.getOperator());
+                break;
+        }
+        InlongGroupInfo groupInfo = groupService.get(groupId);
+        if (groupInfo == null) {
+            String msg = "inlong group not found with groupId=" + groupId;
+            LOGGER.error(msg);
+            throw new WorkflowListenerException(msg);
+        }
+        // Read the current information
+        form.setGroupInfo(groupInfo);
+        form.setStreamInfos(streamService.list(groupId));
         List<InlongStreamInfo> streamInfos = form.getStreamInfos();
+        if (CollectionUtils.isEmpty(streamInfos)) {
+            LOGGER.warn("no need to build sort config for groupId={}, as not found any stream", groupId);
+            return ListenerResult.success();
+        }
+
         int sinkCount = streamInfos.stream()
                 .map(stream -> stream.getSinkList() == null ? 0 : stream.getSinkList().size())
                 .reduce(0, Integer::sum);

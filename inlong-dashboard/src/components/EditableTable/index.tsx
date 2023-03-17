@@ -20,6 +20,7 @@
 import React, { useEffect, useState } from 'react';
 import { AutoComplete, Button, Table, Input, InputNumber, Form } from 'antd';
 import { FormItemProps } from 'antd/lib/form';
+import { TableProps } from 'antd/lib/table';
 import { useTranslation } from 'react-i18next';
 import HighSelect from '@/components/HighSelect';
 import { useUpdateEffect } from '@/hooks';
@@ -51,10 +52,12 @@ export interface ColumnsItemProps {
   visible?: (val: unknown, rowVal: RowValueType) => boolean | boolean;
 }
 
-export interface EditableTableProps {
+export interface EditableTableProps
+  extends Omit<TableProps<any>, 'value' | 'onChange' | 'columns'> {
+  // id comes from FormItem, like name
+  id?: string;
   value?: RowValueType[];
   onChange?: (value: RowValueType[]) => void;
-  size?: string;
   columns: ColumnsItemProps[];
   // Can Edit(Can be changed to read-only)? Default: true.
   editing?: boolean;
@@ -73,7 +76,7 @@ const getRowInitialValue = (columns: EditableTableProps['columns']) =>
       [cur.dataIndex]: cur.initialValue,
     }),
     {
-      _etid: Math.random().toString(),
+      _etid: `_etnew_${Math.random().toString()}`, // The tag of new.
     },
   );
 
@@ -91,7 +94,8 @@ const addIdToValues = (values: RowValueType[]): RecordType[] =>
     return obj as RecordType;
   });
 
-const Comp = ({
+const EditableTable = ({
+  id,
   value,
   onChange,
   columns,
@@ -99,18 +103,18 @@ const Comp = ({
   required = true,
   canDelete = true,
   canAdd = true,
-  size,
+  ...rest
 }: EditableTableProps) => {
+  if (!id) {
+    console.error(
+      'The id is lost, which may cause an error in the value of the array. Please check! Has the component library changed?',
+    );
+  }
+
   const { t } = useTranslation();
 
   const [data, setData] = useState<RecordType[]>(
-    addIdToValues(value) ||
-      (required
-        ? [getRowInitialValue(columns)].map(item => ({
-            ...item,
-            _etid: `_etnew_${item._etid}`, // The tag of new.
-          }))
-        : []),
+    addIdToValues(value) || (required ? [getRowInitialValue(columns)] : []),
   );
 
   const [colsSet, setColsSet] = useState(new Set(columns.map(item => item.dataIndex)));
@@ -240,11 +244,11 @@ const Comp = ({
         // Use div to wrap input, select, etc. so that the value and onChange events are not taken over by FormItem
         // So the actual value change must be changed by onChange itself and then exposed to the outer component
         <Form.Item
-          rules={item.rules?.map(item => ({
-            ...item,
-            transform: () => text ?? '',
-          }))}
+          rules={item.rules?.map(rule =>
+            typeof rule === 'function' ? rule : { ...rule, transform: () => text ?? '' },
+          )}
           messageVariables={{ label: item.title }}
+          // If the `name=[id, idx, item.dataIndex]` is used, the array value error will occur when the select/autocomplete input is entered, and the setValue will be automatically reset.
           name={['__proto__', 'editableRow', idx, item.dataIndex]}
           className={styles.formItem}
         >
@@ -273,10 +277,10 @@ const Comp = ({
 
   return (
     <Table
+      {...rest}
       dataSource={data}
       columns={tableColumns}
       rowKey="_etid"
-      size={size as any}
       footer={
         editing && canAdd
           ? () => (
@@ -290,4 +294,4 @@ const Comp = ({
   );
 };
 
-export default Comp;
+export default EditableTable;

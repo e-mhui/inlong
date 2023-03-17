@@ -1,19 +1,18 @@
 /*
- *  Licensed to the Apache Software Foundation (ASF) under one
- *  or more contributor license agreements.  See the NOTICE file
- *  distributed with this work for additional information
- *  regarding copyright ownership.  The ASF licenses this file
- *  to you under the Apache License, Version 2.0 (the
- *  "License"); you may not use this file except in compliance
- *  with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.inlong.sort.pulsar.table;
@@ -55,7 +54,8 @@ import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.utils.DataTypeUtils;
 import org.apache.flink.util.Preconditions;
-import org.apache.inlong.sort.pulsar.withoutadmin.FlinkPulsarSource;
+import org.apache.inlong.sort.pulsar.internal.FlinkPulsarSource;
+import org.apache.inlong.sort.pulsar.internal.FlinkPulsarSourceWithoutAdmin;
 import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.impl.conf.ClientConfigurationData;
@@ -77,8 +77,7 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
     protected List<String> metadataKeys;
 
     /** Watermark strategy that is used to generate per-partition watermark. */
-    protected @Nullable
-    WatermarkStrategy<RowData> watermarkStrategy;
+    protected @Nullable WatermarkStrategy<RowData> watermarkStrategy;
 
     // --------------------------------------------------------------------------------------------
     // Format attributes
@@ -90,8 +89,7 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
     protected final DataType physicalDataType;
 
     /** Optional format for decoding keys from Pulsar. */
-    protected final @Nullable
-    DecodingFormat<DeserializationSchema<RowData>> keyDecodingFormat;
+    protected final @Nullable DecodingFormat<DeserializationSchema<RowData>> keyDecodingFormat;
 
     /** Format for decoding values from Pulsar. */
     protected final DecodingFormat<DeserializationSchema<RowData>> valueDecodingFormat;
@@ -139,16 +137,12 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
      */
     protected final PulsarTableOptions.StartupOptions startupOptions;
 
-    /**
-     * The default value when startup timestamp is not used.
-     */
-    private static final long DEFAULT_STARTUP_TIMESTAMP_MILLIS = 0L;
-
     /** Flag to determine source mode. In upsert mode, it will keep the tombstone message. **/
     protected final boolean upsertMode;
 
     protected String inlongMetric;
 
+    protected String auditKeys;
     protected String auditHostAndPorts;
 
     public PulsarDynamicTableSource(
@@ -166,7 +160,8 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
             PulsarTableOptions.StartupOptions startupOptions,
             boolean upsertMode,
             String inlongMetric,
-            String auditHostAndPorts) {
+            String auditHostAndPorts,
+            String auditKeys) {
         this.producedDataType = physicalDataType;
         setTopicInfo(properties, topics, topicPattern);
 
@@ -195,6 +190,7 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
         this.upsertMode = upsertMode;
         this.inlongMetric = inlongMetric;
         this.auditHostAndPorts = auditHostAndPorts;
+        this.auditKeys = auditKeys;
     }
 
     private void setTopicInfo(Properties properties, List<String> topics, String topicPattern) {
@@ -244,11 +240,10 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
             DeserializationSchema<RowData> keyDeserialization, DeserializationSchema<RowData> valueDeserialization,
             TypeInformation<RowData> producedTypeInfo) {
         final DynamicPulsarDeserializationSchema.MetadataConverter[] metadataConverters = metadataKeys.stream()
-                .map(k ->
-                        Stream.of(ReadableMetadata.values())
-                                .filter(rm -> rm.key.equals(k))
-                                .findFirst()
-                                .orElseThrow(IllegalStateException::new))
+                .map(k -> Stream.of(ReadableMetadata.values())
+                        .filter(rm -> rm.key.equals(k))
+                        .findFirst()
+                        .orElseThrow(IllegalStateException::new))
                 .map(m -> m.converter)
                 .toArray(DynamicPulsarDeserializationSchema.MetadataConverter[]::new);
 
@@ -273,21 +268,22 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
                 hasMetadata,
                 metadataConverters,
                 producedTypeInfo,
-                upsertMode,
-            inlongMetric,
-            auditHostAndPorts);
+                upsertMode);
     }
 
     private SourceFunction<RowData> createPulsarSource(
             ClientConfigurationData clientConfigurationData,
             PulsarDeserializationSchema<RowData> deserializationSchema) {
-        org.apache.flink.streaming.connectors.pulsar.FlinkPulsarSource source =
-                new org.apache.flink.streaming.connectors.pulsar.FlinkPulsarSource(
+        FlinkPulsarSource source =
+                new FlinkPulsarSource(
                         adminUrl,
+                        serviceUrl,
                         clientConfigurationData,
                         deserializationSchema,
-                        properties
-                );
+                        properties,
+                        inlongMetric,
+                        auditHostAndPorts,
+                        auditKeys);
 
         if (watermarkStrategy != null) {
             source.assignTimestampsAndWatermarks(watermarkStrategy);
@@ -316,12 +312,14 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
     private SourceFunction<RowData> createPulsarSourceWithoutAdmin(
             ClientConfigurationData clientConfigurationData,
             PulsarDeserializationSchema<RowData> deserializationSchema) {
-        FlinkPulsarSource<RowData> source = new FlinkPulsarSource<>(
+        FlinkPulsarSourceWithoutAdmin<RowData> source = new FlinkPulsarSourceWithoutAdmin<>(
                 serviceUrl,
                 clientConfigurationData,
                 deserializationSchema,
-                properties
-        );
+                properties,
+                inlongMetric,
+                auditHostAndPorts,
+                auditKeys);
 
         if (watermarkStrategy != null) {
             source.assignTimestampsAndWatermarks(watermarkStrategy);
@@ -358,7 +356,8 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
                 startupOptions,
                 false,
                 inlongMetric,
-                auditHostAndPorts);
+                auditHostAndPorts,
+                auditKeys);
         copy.producedDataType = producedDataType;
         copy.metadataKeys = metadataKeys;
         copy.watermarkStrategy = watermarkStrategy;
@@ -386,20 +385,20 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
         }
         PulsarDynamicTableSource that = (PulsarDynamicTableSource) o;
         return upsertMode == that.upsertMode && Objects.equals(producedDataType, that.producedDataType)
-            && Objects.equals(metadataKeys, that.metadataKeys)
-            && Objects.equals(watermarkStrategy, that.watermarkStrategy)
-            && Objects.equals(physicalDataType, that.physicalDataType)
-            && Objects.equals(keyDecodingFormat, that.keyDecodingFormat)
-            && Objects.equals(valueDecodingFormat, that.valueDecodingFormat)
-            && Arrays.equals(keyProjection, that.keyProjection)
-            && Arrays.equals(valueProjection, that.valueProjection)
-            && Objects.equals(keyPrefix, that.keyPrefix)
-            && Objects.equals(topics, that.topics)
-            && Objects.equals(topicPattern, that.topicPattern)
-            && Objects.equals(serviceUrl, that.serviceUrl)
-            && Objects.equals(adminUrl, that.adminUrl)
-            && Objects.equals(new HashMap<>(properties), new HashMap<>(that.properties))
-            && Objects.equals(startupOptions, that.startupOptions);
+                && Objects.equals(metadataKeys, that.metadataKeys)
+                && Objects.equals(watermarkStrategy, that.watermarkStrategy)
+                && Objects.equals(physicalDataType, that.physicalDataType)
+                && Objects.equals(keyDecodingFormat, that.keyDecodingFormat)
+                && Objects.equals(valueDecodingFormat, that.valueDecodingFormat)
+                && Arrays.equals(keyProjection, that.keyProjection)
+                && Arrays.equals(valueProjection, that.valueProjection)
+                && Objects.equals(keyPrefix, that.keyPrefix)
+                && Objects.equals(topics, that.topics)
+                && Objects.equals(topicPattern, that.topicPattern)
+                && Objects.equals(serviceUrl, that.serviceUrl)
+                && Objects.equals(adminUrl, that.adminUrl)
+                && Objects.equals(new HashMap<>(properties), new HashMap<>(that.properties))
+                && Objects.equals(startupOptions, that.startupOptions);
     }
 
     @Override
@@ -456,8 +455,7 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
         this.producedDataType = producedDataType;
     }
 
-    private @Nullable
-    DeserializationSchema<RowData> createDeserialization(
+    private @Nullable DeserializationSchema<RowData> createDeserialization(
             Context context,
             @Nullable DecodingFormat<DeserializationSchema<RowData>> format,
             int[] projection,
@@ -486,8 +484,7 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
         TOPIC(
                 "topic",
                 DataTypes.STRING().notNull(),
-                message -> StringData.fromString(message.getTopicName())
-        ),
+                message -> StringData.fromString(message.getTopicName())),
 
         MESSAGE_ID(
                 "messageId",
@@ -515,12 +512,11 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
                 DataTypes.MAP(DataTypes.STRING().nullable(), DataTypes.STRING().nullable()).notNull(),
                 message -> {
                     final Map<StringData, StringData> map = new HashMap<>();
-                    for (Map.Entry<String, String> e: message.getProperties().entrySet()) {
+                    for (Map.Entry<String, String> e : message.getProperties().entrySet()) {
                         map.put(StringData.fromString(e.getKey()), StringData.fromString(e.getValue()));
                     }
                     return new GenericMapData(map);
-                }
-        );
+                });
 
         final String key;
 
@@ -529,7 +525,7 @@ public class PulsarDynamicTableSource implements ScanTableSource, SupportsReadin
         final DynamicPulsarDeserializationSchema.MetadataConverter converter;
 
         ReadableMetadata(String key, DataType dataType,
-                         DynamicPulsarDeserializationSchema.MetadataConverter converter) {
+                DynamicPulsarDeserializationSchema.MetadataConverter converter) {
             this.key = key;
             this.dataType = dataType;
             this.converter = converter;

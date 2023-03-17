@@ -17,8 +17,6 @@
 
 package org.apache.inlong.manager.client.api.util;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.Lists;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.inlong.manager.common.auth.Authentication;
@@ -26,6 +24,8 @@ import org.apache.inlong.manager.common.auth.Authentication.AuthType;
 import org.apache.inlong.manager.common.auth.SecretTokenAuthentication;
 import org.apache.inlong.manager.common.auth.TokenAuthentication;
 import org.apache.inlong.manager.common.consts.InlongConstants;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
+import org.apache.inlong.manager.common.util.JsonUtils;
 import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.pojo.group.InlongGroupExtInfo;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
@@ -42,27 +42,23 @@ import java.util.List;
  */
 public class InlongGroupTransfer {
 
-    public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     /**
      * Create inlong group info from group config.
      */
     public static InlongGroupInfo createGroupInfo(InlongGroupInfo groupInfo, BaseSortConf sortConf) {
-        Preconditions.checkNotNull(groupInfo, "Inlong group info cannot be null");
+        Preconditions.expectNotNull(groupInfo, "Inlong group info cannot be null");
         String groupId = groupInfo.getInlongGroupId();
-        Preconditions.checkNotEmpty(groupId, "groupId cannot be empty");
+        Preconditions.expectNotBlank(groupId, ErrorCodeEnum.GROUP_ID_IS_EMPTY);
         // init extensions
-        if (groupInfo.getExtList() != null) {
-            groupInfo.setExtList(groupInfo.getExtList());
-        } else {
-            groupInfo.setExtList(Lists.newArrayList());
+        if (groupInfo.getExtList() == null) {
+            groupInfo.setExtList(new ArrayList<>());
         }
         // set authentication into group ext list
         List<InlongGroupExtInfo> extInfos = new ArrayList<>();
         if (groupInfo.getAuthentication() != null) {
             Authentication authentication = groupInfo.getAuthentication();
             AuthType authType = authentication.getAuthType();
-            Preconditions.checkTrue(authType == AuthType.TOKEN,
+            Preconditions.expectTrue(authType == AuthType.TOKEN,
                     String.format("Unsupported authentication %s for Pulsar", authType.name()));
             TokenAuthentication tokenAuthentication = (TokenAuthentication) authentication;
             InlongGroupExtInfo authTypeExt = new InlongGroupExtInfo();
@@ -111,7 +107,7 @@ public class InlongGroupTransfer {
         if (flinkSortConf.getAuthentication() != null) {
             Authentication authentication = flinkSortConf.getAuthentication();
             AuthType authType = authentication.getAuthType();
-            Preconditions.checkTrue(authType == AuthType.SECRET_AND_TOKEN,
+            Preconditions.expectTrue(authType == AuthType.SECRET_AND_TOKEN,
                     String.format("Unsupported authentication %s for Flink", authType.name()));
             final SecretTokenAuthentication secretTokenAuthentication = (SecretTokenAuthentication) authentication;
             InlongGroupExtInfo authTypeExt = new InlongGroupExtInfo();
@@ -133,7 +129,7 @@ public class InlongGroupTransfer {
             InlongGroupExtInfo flinkProperties = new InlongGroupExtInfo();
             flinkProperties.setKeyName(InlongConstants.SORT_PROPERTIES);
             try {
-                flinkProperties.setKeyValue(OBJECT_MAPPER.writeValueAsString(flinkSortConf.getProperties()));
+                flinkProperties.setKeyValue(JsonUtils.toJsonString(flinkSortConf.getProperties()));
             } catch (Exception e) {
                 throw new RuntimeException("get json for sort properties error: " + e.getMessage());
             }
@@ -159,7 +155,7 @@ public class InlongGroupTransfer {
             InlongGroupExtInfo flinkProperties = new InlongGroupExtInfo();
             flinkProperties.setKeyName(InlongConstants.SORT_PROPERTIES);
             try {
-                flinkProperties.setKeyValue(OBJECT_MAPPER.writeValueAsString(userDefinedSortConf.getProperties()));
+                flinkProperties.setKeyValue(JsonUtils.toJsonString(userDefinedSortConf.getProperties()));
             } catch (Exception e) {
                 throw new RuntimeException("get json for sort properties error: " + e.getMessage());
             }

@@ -1,12 +1,12 @@
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,18 +18,23 @@
 package org.apache.inlong.sort.elasticsearch6;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.streaming.connectors.elasticsearch.RequestIndexer;
 import org.apache.flink.streaming.connectors.elasticsearch6.RestClientFactory;
 import org.apache.flink.util.Preconditions;
 import org.apache.http.HttpHost;
+import org.apache.inlong.sort.elasticsearch.BulkProcessorOptions;
 import org.apache.inlong.sort.elasticsearch.ElasticsearchApiCallBridge;
 import org.apache.inlong.sort.elasticsearch.ElasticsearchSinkBase;
+import org.apache.inlong.sort.elasticsearch.RequestIndexer;
+import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.bulk.BackoffPolicy;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
+import org.elasticsearch.action.bulk.BulkProcessor.Builder;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.unit.ByteSizeUnit;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,11 +50,12 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Internal
 public class Elasticsearch6ApiCallBridge
-        implements ElasticsearchApiCallBridge<RestHighLevelClient> {
+        implements
+            ElasticsearchApiCallBridge<DocWriteRequest<?>, BulkProcessor.Builder, BulkProcessor.Listener, BulkItemResponse, BulkProcessor, RestHighLevelClient> {
 
     private static final long serialVersionUID = -5222683870097809633L;
 
-    private static final Logger LOG = LoggerFactory.getLogger(Elasticsearch6ApiCallBridge.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(Elasticsearch6ApiCallBridge.class);
 
     /**
      * User-provided HTTP Host.
@@ -72,9 +78,7 @@ public class Elasticsearch6ApiCallBridge
         RestClientBuilder builder =
                 RestClient.builder(httpHosts.toArray(new HttpHost[httpHosts.size()]));
         restClientFactory.configureRestClientBuilder(builder);
-
         RestHighLevelClient rhlClient = new RestHighLevelClient(builder);
-
         return rhlClient;
     }
 
@@ -82,6 +86,11 @@ public class Elasticsearch6ApiCallBridge
     public BulkProcessor.Builder createBulkProcessorBuilder(
             RestHighLevelClient client, BulkProcessor.Listener listener) {
         return BulkProcessor.builder(client::bulkAsync, listener);
+    }
+
+    @Override
+    public BulkProcessor buildBulkProcessor(Builder builder) {
+        return builder.build();
     }
 
     @Override
@@ -122,7 +131,7 @@ public class Elasticsearch6ApiCallBridge
     }
 
     @Override
-    public RequestIndexer createBulkProcessorIndexer(
+    public RequestIndexer<DocWriteRequest<?>> createBulkProcessorIndexer(
             BulkProcessor bulkProcessor,
             boolean flushOnCheckpoint,
             AtomicLong numPendingRequestsRef) {
@@ -131,17 +140,43 @@ public class Elasticsearch6ApiCallBridge
     }
 
     @Override
+    public void configureBulkProcessor(Builder builder, BulkProcessorOptions options) {
+        builder.setConcurrentRequests(options.getConcurrentRequests());
+        if (options.getFlushMaxActions() != null) {
+            builder.setBulkActions(options.getFlushMaxActions());
+        }
+        if (options.getFlushMaxSizeMb() != null) {
+            final ByteSizeUnit sizeUnit;
+            if (options.getFlushMaxSizeMb() == -1) {
+                // bulk size can be disabled with -1, however the ByteSizeValue constructor accepts -1
+                // only with BYTES as the size unit
+                sizeUnit = ByteSizeUnit.BYTES;
+            } else {
+                sizeUnit = ByteSizeUnit.MB;
+            }
+            builder.setBulkSize(new ByteSizeValue(options.getFlushMaxSizeMb(), sizeUnit));
+        }
+        if (options.getFlushInterval() != null) {
+            if (options.getFlushInterval() == -1) {
+                builder.setFlushInterval(null);
+            } else {
+                builder.setFlushInterval(TimeValue.timeValueMillis(options.getFlushInterval()));
+            }
+        }
+    }
+
+    @Override
     public void verifyClientConnection(RestHighLevelClient client) throws IOException {
-        if (LOG.isInfoEnabled()) {
-            LOG.info("Pinging Elasticsearch cluster via hosts {} ...", httpHosts);
+        if (LOGGER.isInfoEnabled()) {
+            LOGGER.info("Pinging Elasticsearch cluster via hosts {} ...", httpHosts);
         }
 
         if (!client.ping()) {
             throw new RuntimeException("There are no reachable Elasticsearch nodes!");
         }
 
-        if (LOG.isInfoEnabled()) {
-            LOG.info("Elasticsearch RestHighLevelClient is connected to {}", httpHosts.toString());
+        if (LOGGER.isInfoEnabled()) {
+            LOGGER.info("Elasticsearch RestHighLevelClient is connected to {}", httpHosts.toString());
         }
     }
 }

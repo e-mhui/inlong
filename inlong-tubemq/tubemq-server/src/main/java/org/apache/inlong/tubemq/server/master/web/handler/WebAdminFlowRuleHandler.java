@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -28,8 +28,10 @@ import org.apache.inlong.tubemq.corebase.TBaseConstants;
 import org.apache.inlong.tubemq.corebase.rv.ProcessResult;
 import org.apache.inlong.tubemq.server.common.TServerConstants;
 import org.apache.inlong.tubemq.server.common.fielddef.WebFieldDef;
+import org.apache.inlong.tubemq.server.common.statusdef.EnableStatus;
 import org.apache.inlong.tubemq.server.common.utils.WebParameterUtils;
 import org.apache.inlong.tubemq.server.master.TMaster;
+import org.apache.inlong.tubemq.server.master.metamanage.DataOpErrCode;
 import org.apache.inlong.tubemq.server.master.metamanage.metastore.dao.entity.BaseEntity;
 import org.apache.inlong.tubemq.server.master.metamanage.metastore.dao.entity.GroupResCtrlEntity;
 
@@ -68,8 +70,8 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
      * @return    process result
      */
     public StringBuilder adminQueryGroupFlowCtrlRule(HttpServletRequest req,
-                                                     StringBuilder sBuffer,
-                                                     ProcessResult result) {
+            StringBuilder sBuffer,
+            ProcessResult result) {
         // build query entity
         GroupResCtrlEntity qryEntity = new GroupResCtrlEntity();
         // get queried operation info, for createUser, modifyUser, dataVersionId
@@ -97,7 +99,7 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
             WebParameterUtils.buildFailResult(sBuffer, result.getErrMsg());
             return sBuffer;
         }
-        Boolean flowCtrlEnable = (Boolean) result.getRetData();
+        EnableStatus flowCtrlEnable = (EnableStatus) result.getRetData();
         qryEntity.updModifyInfo(qryEntity.getDataVerId(), null,
                 TBaseConstants.META_VALUE_UNDEFINED, inQryPriorityId,
                 flowCtrlEnable, TBaseConstants.META_VALUE_UNDEFINED, null);
@@ -128,8 +130,8 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
      * @return    process result
      */
     public StringBuilder adminSetGroupFlowCtrlRule(HttpServletRequest req,
-                                                   StringBuilder sBuffer,
-                                                   ProcessResult result) {
+            StringBuilder sBuffer,
+            ProcessResult result) {
         return innAddOrUpdGroupFlowCtrlRule(req, sBuffer, result, true);
     }
 
@@ -142,8 +144,8 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
      * @return    process result
      */
     public StringBuilder adminUpdGroupFlowCtrlRule(HttpServletRequest req,
-                                                   StringBuilder sBuffer,
-                                                   ProcessResult result) {
+            StringBuilder sBuffer,
+            ProcessResult result) {
         return innAddOrUpdGroupFlowCtrlRule(req, sBuffer, result, false);
     }
 
@@ -156,8 +158,8 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
      * @return    process result
      */
     public StringBuilder adminDelGroupFlowCtrlRule(HttpServletRequest req,
-                                                   StringBuilder sBuffer,
-                                                   ProcessResult result) {
+            StringBuilder sBuffer,
+            ProcessResult result) {
         // check and get operation info
         if (!WebParameterUtils.getAUDBaseInfo(req, false, null, sBuffer, result)) {
             WebParameterUtils.buildFailResult(sBuffer, result.getErrMsg());
@@ -172,11 +174,19 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
         }
         Set<String> groupNameSet = (Set<String>) result.getRetData();
         // add or modify records
+        GroupResCtrlEntity ctrlEntity;
         List<GroupProcessResult> retInfoList = new ArrayList<>();
         for (String groupName : groupNameSet) {
-            retInfoList.add(defMetaDataService.insertGroupCtrlConf(opEntity, groupName,
-                    TServerConstants.QRY_PRIORITY_DEF_VALUE, Boolean.FALSE,
-                    0, TServerConstants.BLANK_FLOWCTRL_RULES, sBuffer, result));
+            ctrlEntity = defMetaDataService.getGroupCtrlConf(groupName);
+            if (ctrlEntity != null
+                    && ctrlEntity.getFlowCtrlStatus() != EnableStatus.STATUS_DISABLE) {
+                retInfoList.add(defMetaDataService.insertGroupCtrlConf(opEntity, groupName,
+                        TServerConstants.QRY_PRIORITY_DEF_VALUE, EnableStatus.STATUS_DISABLE,
+                        0, TServerConstants.BLANK_FLOWCTRL_RULES, sBuffer, result));
+            } else {
+                result.setFullInfo(true, DataOpErrCode.DERR_SUCCESS.getCode(), "Ok");
+                retInfoList.add(new GroupProcessResult(groupName, "", result));
+            }
         }
         return buildRetInfo(retInfoList, sBuffer);
     }
@@ -190,9 +200,9 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
      * @return    process result
      */
     private StringBuilder innAddOrUpdGroupFlowCtrlRule(HttpServletRequest req,
-                                                       StringBuilder sBuffer,
-                                                       ProcessResult result,
-                                                       boolean isAddOp) {
+            StringBuilder sBuffer,
+            ProcessResult result,
+            boolean isAddOp) {
         // check and get operation info
         if (!WebParameterUtils.getAUDBaseInfo(req, isAddOp, null, sBuffer, result)) {
             WebParameterUtils.buildFailResult(sBuffer, result.getErrMsg());
@@ -220,7 +230,7 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
             WebParameterUtils.buildFailResult(sBuffer, result.getErrMsg());
             return sBuffer;
         }
-        Boolean flowCtrlEnable = (Boolean) result.getRetData();
+        EnableStatus flowCtrlEnable = (EnableStatus) result.getRetData();
         // get and flow control rule info
         int flowRuleCnt = WebParameterUtils.getAndCheckFlowRules(req,
                 (isAddOp ? TServerConstants.BLANK_FLOWCTRL_RULES : null), sBuffer, result);
@@ -230,16 +240,29 @@ public class WebAdminFlowRuleHandler extends AbstractWebHandler {
         }
         String flowCtrlInfo = (String) result.getRetData();
         // add or modify records
+        GroupResCtrlEntity ctrlEntity;
         List<GroupProcessResult> retInfoList = new ArrayList<>();
         for (String groupName : groupNameSet) {
-            retInfoList.add(defMetaDataService.insertGroupCtrlConf(opEntity, groupName,
-                    qryPriorityId, flowCtrlEnable, flowRuleCnt, flowCtrlInfo, sBuffer, result));
+            ctrlEntity = defMetaDataService.getGroupCtrlConf(groupName);
+            if (ctrlEntity == null) {
+                if (isAddOp) {
+                    retInfoList.add(defMetaDataService.insertGroupCtrlConf(opEntity, groupName,
+                            qryPriorityId, flowCtrlEnable, flowRuleCnt, flowCtrlInfo, sBuffer, result));
+                } else {
+                    result.setFailResult(DataOpErrCode.DERR_NOT_EXIST.getCode(),
+                            DataOpErrCode.DERR_NOT_EXIST.getDescription());
+                    retInfoList.add(new GroupProcessResult(groupName, "", result));
+                }
+            } else {
+                retInfoList.add(defMetaDataService.insertGroupCtrlConf(opEntity, groupName,
+                        qryPriorityId, flowCtrlEnable, flowRuleCnt, flowCtrlInfo, sBuffer, result));
+            }
         }
         return buildRetInfo(retInfoList, sBuffer);
     }
 
     private StringBuilder buildRetInfo(List<GroupProcessResult> retInfo,
-                                       StringBuilder sBuffer) {
+            StringBuilder sBuffer) {
         int totalCnt = 0;
         WebParameterUtils.buildSuccessWithDataRetBegin(sBuffer);
         for (GroupProcessResult entry : retInfo) {

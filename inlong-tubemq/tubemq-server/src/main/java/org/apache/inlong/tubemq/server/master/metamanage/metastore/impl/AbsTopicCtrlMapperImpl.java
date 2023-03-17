@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.inlong.tubemq.corebase.TBaseConstants;
 import org.apache.inlong.tubemq.corebase.rv.ProcessResult;
 import org.apache.inlong.tubemq.server.master.metamanage.DataOpErrCode;
 import org.apache.inlong.tubemq.server.master.metamanage.metastore.dao.entity.TopicCtrlEntity;
@@ -32,11 +33,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public abstract class AbsTopicCtrlMapperImpl implements TopicCtrlMapper {
+
     protected static final Logger logger =
             LoggerFactory.getLogger(AbsTopicCtrlMapperImpl.class);
     // data cache
-    private final ConcurrentHashMap<String/* topicName */, TopicCtrlEntity>
-            topicCtrlCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String/* topicName */, TopicCtrlEntity> topicCtrlCache = new ConcurrentHashMap<>();
 
     public AbsTopicCtrlMapperImpl() {
         // Initial instant
@@ -44,7 +45,7 @@ public abstract class AbsTopicCtrlMapperImpl implements TopicCtrlMapper {
 
     @Override
     public boolean addTopicCtrlConf(TopicCtrlEntity entity,
-                                    StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         // Checks whether the record already exists
         TopicCtrlEntity curEntity = topicCtrlCache.get(entity.getTopicName());
         if (curEntity != null) {
@@ -63,7 +64,7 @@ public abstract class AbsTopicCtrlMapperImpl implements TopicCtrlMapper {
 
     @Override
     public boolean updTopicCtrlConf(TopicCtrlEntity entity,
-                                    StringBuilder strBuff, ProcessResult result) {
+            StringBuilder strBuff, ProcessResult result) {
         // Checks whether the record already exists
         TopicCtrlEntity curEntity = topicCtrlCache.get(entity.getTopicName());
         if (curEntity == null) {
@@ -78,7 +79,7 @@ public abstract class AbsTopicCtrlMapperImpl implements TopicCtrlMapper {
         newEntity.updBaseModifyInfo(entity);
         if (!newEntity.updModifyInfo(entity.getDataVerId(),
                 entity.getTopicId(), entity.getMaxMsgSizeInMB(),
-                entity.isAuthCtrlEnable())) {
+                entity.getAuthCtrlStatus())) {
             result.setFailResult(DataOpErrCode.DERR_UNCHANGED.getCode(),
                     "Topic control configure not changed!");
             return result.isSuccess();
@@ -93,8 +94,8 @@ public abstract class AbsTopicCtrlMapperImpl implements TopicCtrlMapper {
 
     @Override
     public boolean delTopicCtrlConf(String topicName,
-                                    StringBuilder strBuff,
-                                    ProcessResult result) {
+            StringBuilder strBuff,
+            ProcessResult result) {
         TopicCtrlEntity curEntity =
                 topicCtrlCache.get(topicName);
         if (curEntity == null) {
@@ -129,7 +130,7 @@ public abstract class AbsTopicCtrlMapperImpl implements TopicCtrlMapper {
 
     @Override
     public Map<String, TopicCtrlEntity> getTopicCtrlConf(Set<String> topicNameSet,
-                                                         TopicCtrlEntity qryEntity) {
+            TopicCtrlEntity qryEntity) {
         Set<String> qryKeySet = new HashSet<>();
         Map<String, TopicCtrlEntity> retEntityMap = new HashMap<>();
         if (topicNameSet == null || topicNameSet.isEmpty()) {
@@ -145,6 +146,32 @@ public abstract class AbsTopicCtrlMapperImpl implements TopicCtrlMapper {
             retEntityMap.put(topicName, entity);
         }
         return retEntityMap;
+    }
+
+    @Override
+    public Map<String, Integer> getMaxMsgSizeInBByTopics(int defMaxMsgSizeInB,
+            Set<String> topicNameSet) {
+        Map<String, Integer> resultMap = new HashMap<>();
+        if (topicNameSet == null || topicNameSet.isEmpty()) {
+            return resultMap;
+        }
+        TopicCtrlEntity ctrlEntity;
+        for (String topic : topicNameSet) {
+            if (topic == null) {
+                continue;
+            }
+            ctrlEntity = topicCtrlCache.get(topic);
+            if (ctrlEntity == null) {
+                continue;
+            }
+            if (ctrlEntity.getMaxMsgSizeInB() == TBaseConstants.META_VALUE_UNDEFINED
+                    || ctrlEntity.getMaxMsgSizeInB() == defMaxMsgSizeInB) {
+                resultMap.put(topic, null);
+            } else {
+                resultMap.put(topic, ctrlEntity.getMaxMsgSizeInB());
+            }
+        }
+        return resultMap;
     }
 
     /**
@@ -172,7 +199,7 @@ public abstract class AbsTopicCtrlMapperImpl implements TopicCtrlMapper {
      * @return the process result
      */
     protected abstract boolean putConfig2Persistent(TopicCtrlEntity entity,
-                                                    StringBuilder strBuff, ProcessResult result);
+            StringBuilder strBuff, ProcessResult result);
 
     /**
      * Delete topic control configure information from persistent storage

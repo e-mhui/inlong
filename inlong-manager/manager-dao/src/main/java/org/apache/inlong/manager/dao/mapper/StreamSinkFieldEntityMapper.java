@@ -17,8 +17,12 @@
 
 package org.apache.inlong.manager.dao.mapper;
 
+import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.cursor.Cursor;
+import org.apache.ibatis.mapping.ResultSetType;
 import org.apache.inlong.manager.dao.entity.StreamSinkFieldEntity;
+import org.apache.inlong.manager.pojo.sort.standalone.SortFieldInfo;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -34,28 +38,37 @@ public interface StreamSinkFieldEntityMapper {
 
     List<StreamSinkFieldEntity> selectFields(@Param("groupId") String groupId, @Param("streamId") String streamId);
 
+    @Options(resultSetType = ResultSetType.FORWARD_ONLY, fetchSize = Integer.MIN_VALUE)
+    Cursor<SortFieldInfo> selectAllFields();
+
     /**
      * According to the sink id, query the sink field.
      *
      * @param sinkId sink id.
-     * @return Sink field list.
+     * @return sink field list.
      */
     List<StreamSinkFieldEntity> selectBySinkId(@Param("sinkId") Integer sinkId);
 
     /**
-     * According to the sink id, logically delete the corresponding field information.
+     * Logically delete all stream sink fields based on sink id
      *
-     * @param sinkId sink id.
-     * @return rows deleted.
+     * @param sinkId sink id
+     * @return rows deleted
      */
     int logicDeleteAll(@Param("sinkId") Integer sinkId);
 
     /**
-     * According to the sink id, physically delete the corresponding field information
+     * Physically delete all stream sink fields based on sink id
      *
-     * @param sinkId sink id.
-     * @return rows deleted.
+     * @return rows deleted
      */
     int deleteAll(@Param("sinkId") Integer sinkId);
+
+    /**
+     * Physically delete all stream sink fields based on inlong group ids
+     *
+     * @return rows deleted
+     */
+    int deleteByInlongGroupIds(@Param("groupIdList") List<String> groupIdList);
 
 }

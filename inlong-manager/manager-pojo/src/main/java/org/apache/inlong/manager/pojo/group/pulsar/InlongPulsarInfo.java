@@ -23,17 +23,15 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
-import lombok.experimental.SuperBuilder;
-import org.apache.inlong.manager.common.consts.MQType;
-import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
+import org.apache.inlong.common.constant.MQType;
 import org.apache.inlong.manager.common.util.CommonBeanUtils;
 import org.apache.inlong.manager.common.util.JsonTypeDefine;
+import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 
 /**
  * Inlong group info for Pulsar
  */
 @Data
-@SuperBuilder
 @AllArgsConstructor
 @ToString(callSuper = true)
 @EqualsAndHashCode(callSuper = true)
@@ -43,12 +41,6 @@ public class InlongPulsarInfo extends InlongGroupInfo {
 
     @ApiModelProperty(value = "Pulsar tenant")
     private String tenant;
-
-    @ApiModelProperty(value = "Pulsar admin URL")
-    private String adminUrl;
-
-    @ApiModelProperty(value = "Pulsar service URL")
-    private String serviceUrl;
 
     @ApiModelProperty(value = "Queue model, parallel: multiple partitions, high throughput, out-of-order messages;"
             + "serial: single partition, low throughput, and orderly messages")

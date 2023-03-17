@@ -17,13 +17,14 @@
 
 package org.apache.inlong.manager.client.api.impl;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.User;
 import org.apache.inlong.manager.client.api.inner.client.ClientFactory;
 import org.apache.inlong.manager.client.api.inner.client.UserClient;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.util.Preconditions;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.user.UserInfo;
 import org.apache.inlong.manager.pojo.user.UserRequest;
 
@@ -43,33 +44,40 @@ public class UserImpl implements User {
 
     @Override
     public Integer register(UserRequest userInfo) {
-        Preconditions.checkNotEmpty(userInfo.getName(), "username cannot be empty");
-        Preconditions.checkNotEmpty(userInfo.getPassword(), "password cannot be empty");
+        Preconditions.expectNotBlank(userInfo.getName(), ErrorCodeEnum.INVALID_PARAMETER, "username cannot be empty");
+        Preconditions.expectNotBlank(userInfo.getPassword(), ErrorCodeEnum.INVALID_PARAMETER,
+                "password cannot be empty");
         return userClient.register(userInfo);
     }
 
     @Override
     public UserInfo getById(Integer id) {
-        Preconditions.checkNotNull(id, "user id cannot be null");
+        Preconditions.expectNotNull(id, "user id cannot be null");
         return userClient.getById(id);
     }
 
     @Override
-    public PageInfo<UserInfo> list(UserRequest request) {
-        Preconditions.checkNotNull(request, "request cannot be null");
+    public UserInfo getByName(String name) {
+        Preconditions.expectNotBlank(name, ErrorCodeEnum.INVALID_PARAMETER, "username cannot be null");
+        return userClient.getByName(name);
+    }
+
+    @Override
+    public PageResult<UserInfo> list(UserRequest request) {
+        Preconditions.expectNotNull(request, "request cannot be null");
         return userClient.list(request);
     }
 
     @Override
     public Integer update(UserRequest userInfo) {
-        Preconditions.checkNotNull(userInfo, "userinfo cannot be null");
-        Preconditions.checkNotNull(userInfo.getId(), "user id cannot be null");
+        Preconditions.expectNotNull(userInfo, "userinfo cannot be null");
+        Preconditions.expectNotNull(userInfo.getId(), "user id cannot be null");
         return userClient.update(userInfo);
     }
 
     @Override
     public Boolean delete(Integer id) {
-        Preconditions.checkNotNull(id, "user id cannot be null");
+        Preconditions.expectNotNull(id, "user id cannot be null");
         return userClient.delete(id);
     }
 }

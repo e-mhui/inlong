@@ -38,6 +38,8 @@ public class CanalJsonFormat implements Format {
 
     private static final long serialVersionUID = 1L;
 
+    private static final String IDENTIFIER = "canal-json";
+
     @JsonProperty(value = "ignoreParseErrors", defaultValue = "true")
     private Boolean ignoreParseErrors;
     @JsonProperty(value = "timestampFormatStandard", defaultValue = "SQL")
@@ -54,8 +56,7 @@ public class CanalJsonFormat implements Format {
             @JsonProperty(value = "timestampFormatStandard", defaultValue = "SQL") String timestampFormatStandard,
             @JsonProperty(value = "mapNullKeyMode", defaultValue = "DROP") String mapNullKeyMode,
             @JsonProperty(value = "mapNullKeyLiteral", defaultValue = "null") String mapNullKeyLiteral,
-            @JsonProperty(value = "encodeDecimalAsPlainNumber", defaultValue = "true")
-                    Boolean encodeDecimalAsPlainNumber) {
+            @JsonProperty(value = "encodeDecimalAsPlainNumber", defaultValue = "true") Boolean encodeDecimalAsPlainNumber) {
         this.ignoreParseErrors = ignoreParseErrors;
         this.timestampFormatStandard = timestampFormatStandard;
         this.mapNullKeyMode = mapNullKeyMode;
@@ -77,6 +78,11 @@ public class CanalJsonFormat implements Format {
     @Override
     public String getFormat() {
         return "canal-json-inlong";
+    }
+
+    @Override
+    public String identifier() {
+        return IDENTIFIER;
     }
 
     /**

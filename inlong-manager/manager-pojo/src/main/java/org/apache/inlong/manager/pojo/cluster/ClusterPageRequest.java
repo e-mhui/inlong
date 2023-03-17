@@ -60,6 +60,9 @@ public class ClusterPageRequest extends PageRequest {
     @ApiModelProperty(value = "Extend tag")
     private String extTag;
 
+    @ApiModelProperty(value = "Protocol type, such as: TCP, HTTP")
+    private String protocolType;
+
     @ApiModelProperty(value = "The inlong cluster tag list")
     private List<String> clusterTagList;
 
@@ -68,5 +71,8 @@ public class ClusterPageRequest extends PageRequest {
 
     @ApiModelProperty(value = "Current user", hidden = true)
     private String currentUser;
+
+    @ApiModelProperty(value = "Whether the current user is in the administrator role", hidden = true)
+    private Boolean isAdminRole;
 
 }

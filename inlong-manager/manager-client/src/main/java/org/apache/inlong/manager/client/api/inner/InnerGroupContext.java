@@ -22,9 +22,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.commons.collections.MapUtils;
 import org.apache.inlong.manager.client.api.InlongStream;
+import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.workflow.form.process.ApplyGroupProcessForm;
-import org.apache.inlong.manager.common.util.Preconditions;
 
 import java.util.Map;
 
@@ -44,12 +44,12 @@ public class InnerGroupContext {
     private ApplyGroupProcessForm initMsg;
 
     public String getGroupId() {
-        Preconditions.checkNotNull(groupInfo, "inlong group info was not init");
+        Preconditions.expectNotNull(groupInfo, "inlong group info was not init");
         return groupInfo.getInlongGroupId();
     }
 
     public void setStreamContext(InnerStreamContext streamContext) {
-        Preconditions.checkTrue(streamContext != null && streamContext.getStreamInfo() != null,
+        Preconditions.expectTrue(streamContext != null && streamContext.getStreamInfo() != null,
                 "stream context cannot be null");
         if (MapUtils.isEmpty(streamContextMap)) {
             streamContextMap = Maps.newHashMap();
@@ -58,7 +58,7 @@ public class InnerGroupContext {
     }
 
     public void setStream(InlongStream stream) {
-        Preconditions.checkTrue(stream != null, "stream cannot be null");
+        Preconditions.expectTrue(stream != null, "stream cannot be null");
         if (MapUtils.isEmpty(streamMap)) {
             streamMap = Maps.newHashMap();
         }

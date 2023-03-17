@@ -35,8 +35,10 @@ import org.apache.inlong.dataproxy.config.holder.GroupIdPropertiesHolder;
 import org.apache.inlong.dataproxy.config.holder.MQClusterConfigHolder;
 import org.apache.inlong.dataproxy.config.holder.MxPropertiesHolder;
 import org.apache.inlong.dataproxy.config.holder.PropertiesConfigHolder;
+import org.apache.inlong.dataproxy.config.holder.SourceReportConfigHolder;
+import org.apache.inlong.dataproxy.config.holder.SourceReportInfo;
 import org.apache.inlong.dataproxy.config.pojo.MQClusterConfig;
-import org.apache.inlong.dataproxy.consts.AttributeConstants;
+import org.apache.inlong.dataproxy.consts.AttrConstants;
 import org.apache.inlong.dataproxy.consts.ConfigConstants;
 import org.apache.inlong.dataproxy.utils.HttpUtils;
 import org.slf4j.Logger;
@@ -44,9 +46,12 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.inlong.dataproxy.consts.ConfigConstants.CONFIG_CHECK_INTERVAL;
 
@@ -54,6 +59,8 @@ import static org.apache.inlong.dataproxy.consts.ConfigConstants.CONFIG_CHECK_IN
  * Config manager class.
  */
 public class ConfigManager {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ConfigManager.class);
 
     public static final List<ConfigHolder> CONFIG_HOLDER_LIST = new ArrayList<>();
     private static volatile boolean isInit = false;
@@ -70,6 +77,10 @@ public class ConfigManager {
     private final PropertiesConfigHolder tubeSwitchConfig = new PropertiesConfigHolder("tube_switch.properties");
     private final PropertiesConfigHolder weightHolder = new PropertiesConfigHolder("weight.properties");
     private final FileConfigHolder blackListConfig = new FileConfigHolder("blacklist.properties");
+    // source report configure holder
+    private final SourceReportConfigHolder sourceReportConfigHolder = new SourceReportConfigHolder();
+    // mq clusters ready
+    private final AtomicBoolean mqClusterReady = new AtomicBoolean(false);
 
     /**
      * get instance for config manager
@@ -101,6 +112,89 @@ public class ConfigManager {
         return topicConfig.getHolder();
     }
 
+    public boolean addTopicProperties(Map<String, String> result) {
+        return updatePropertiesHolder(result, topicConfig, true);
+    }
+
+    public boolean deleteTopicProperties(Map<String, String> result) {
+        return updatePropertiesHolder(result, topicConfig, false);
+    }
+
+    public Map<String, String> getMxProperties() {
+        return mxConfig.getHolder();
+    }
+
+    public boolean addMxProperties(Map<String, String> result) {
+        return updatePropertiesHolder(result, mxConfig, true);
+    }
+
+    public boolean deleteMxProperties(Map<String, String> result) {
+        return updatePropertiesHolder(result, mxConfig, false);
+    }
+
+    public boolean updateTopicProperties(Map<String, String> result) {
+        return updatePropertiesHolder(result, topicConfig);
+    }
+
+    public boolean updateMQClusterProperties(Map<String, String> result) {
+        return updatePropertiesHolder(result, mqClusterConfigHolder);
+    }
+
+    public boolean updateMxProperties(Map<String, String> result) {
+        return updatePropertiesHolder(result, mxConfig);
+    }
+
+    public void addSourceReportInfo(String sourceIp, String sourcePort, String protocolType) {
+        sourceReportConfigHolder.addSourceInfo(sourceIp, sourcePort, protocolType);
+    }
+
+    public SourceReportInfo getSourceReportInfo() {
+        return sourceReportConfigHolder.getSourceReportInfo();
+    }
+
+    public boolean isMqClusterReady() {
+        return mqClusterReady.get();
+    }
+
+    public void updMqClusterStatus(boolean isStarted) {
+        mqClusterReady.set(isStarted);
+    }
+
+    /**
+     * update old maps, reload local files if changed.
+     *
+     * @param result - map pending to be added
+     * @param holder - property holder
+     * @return true if changed else false.
+     */
+    private boolean updatePropertiesHolder(Map<String, String> result,
+            PropertiesConfigHolder holder) {
+        boolean changed = false;
+        Map<String, String> tmpHolder = holder.forkHolder();
+        // Delete non-existent configuration records
+        Iterator<Map.Entry<String, String>> it = tmpHolder.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, String> entry = it.next();
+            if (!result.containsKey(entry.getKey())) {
+                it.remove();
+                changed = true;
+            }
+        }
+        // add new configure records
+        for (Map.Entry<String, String> entry : result.entrySet()) {
+            String oldValue = tmpHolder.put(entry.getKey(), entry.getValue());
+            if ((entry.getValue() == null && !Objects.equals("null", oldValue))
+                    || (entry.getValue() != null && !Objects.equals(entry.getValue(), oldValue))) {
+                changed = true;
+            }
+        }
+        if (changed) {
+            return holder.loadFromHolderToFile(tmpHolder);
+        } else {
+            return false;
+        }
+    }
+
     /**
      * update old maps, reload local files if changed.
      *
@@ -109,7 +203,8 @@ public class ConfigManager {
      * @param addElseRemove - if add(true) else remove(false)
      * @return true if changed else false.
      */
-    private boolean updatePropertiesHolder(Map<String, String> result, PropertiesConfigHolder holder,
+    private boolean updatePropertiesHolder(Map<String, String> result,
+            PropertiesConfigHolder holder,
             boolean addElseRemove) {
         Map<String, String> tmpHolder = holder.forkHolder();
         boolean changed = false;
@@ -133,30 +228,6 @@ public class ConfigManager {
         } else {
             return false;
         }
-    }
-
-    public boolean addTopicProperties(Map<String, String> result) {
-        return updatePropertiesHolder(result, topicConfig, true);
-    }
-
-    public boolean deleteTopicProperties(Map<String, String> result) {
-        return updatePropertiesHolder(result, topicConfig, false);
-    }
-
-    public boolean updateMQClusterProperties(Map<String, String> result) {
-        return updatePropertiesHolder(result, mqClusterConfigHolder, true);
-    }
-
-    public Map<String, String> getMxProperties() {
-        return mxConfig.getHolder();
-    }
-
-    public boolean addMxProperties(Map<String, String> result) {
-        return updatePropertiesHolder(result, mxConfig, true);
-    }
-
-    public boolean deleteMxProperties(Map<String, String> result) {
-        return updatePropertiesHolder(result, mxConfig, false);
     }
 
     public Map<String, String> getDcMappingProperties() {
@@ -212,7 +283,6 @@ public class ConfigManager {
      */
     public static class ReloadConfigWorker extends Thread {
 
-        private static final Logger LOG = LoggerFactory.getLogger(ReloadConfigWorker.class);
         private final ConfigManager configManager;
         private final CloseableHttpClient httpClient;
         private final Gson gson = new Gson();
@@ -302,9 +372,9 @@ public class ConfigManager {
                 if (configJson.isSuccess() && configJson.getData() != null) {
                     LOG.info("getConfig result: {}", returnStr);
                     /*
-                     * get mqUrls <->token maps;
-                     * if mq is pulsar, store format: mq_cluster.index1=cluster1url1,cluster1url2=token
-                     * if mq is tubemq, token is "", store format: mq_cluster.index1=cluster1url1,cluster1url2=
+                     * get mqUrls <->token maps; if mq is pulsar, store format:
+                     * mq_cluster.index1=cluster1url1,cluster1url2=token if mq is tubemq, token is "", store format:
+                     * mq_cluster.index1=cluster1url1,cluster1url2=
                      */
                     int index = 1;
                     List<MQClusterInfo> clusterSet = configJson.getData().getMqClusterList();
@@ -315,7 +385,7 @@ public class ConfigManager {
                     for (MQClusterInfo mqCluster : clusterSet) {
                         String key = MQClusterConfigHolder.URL_STORE_PREFIX + index;
                         String value =
-                                mqCluster.getUrl() + AttributeConstants.KEY_VALUE_SEPARATOR + mqCluster.getToken();
+                                mqCluster.getUrl() + AttrConstants.KEY_VALUE_SEPARATOR + mqCluster.getToken();
                         mqConfig.put(key, value);
                         ++index;
                     }
@@ -328,8 +398,8 @@ public class ConfigManager {
                             groupIdToTopic.put(topic.getInlongGroupId(), topic.getTopic());
                         }
                     }
-                    configManager.addMxProperties(groupIdToMValue);
-                    configManager.addTopicProperties(groupIdToTopic);
+                    configManager.updateMxProperties(groupIdToMValue);
+                    configManager.updateTopicProperties(groupIdToTopic);
                     // other params for mq
                     mqConfig.putAll(clusterSet.get(0).getParams());
                     configManager.updateMQClusterProperties(mqConfig);

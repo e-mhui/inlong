@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.apache.inlong.manager.common.util.JsonTypeDefine;
+import org.apache.inlong.manager.common.util.JsonUtils;
 import org.apache.inlong.manager.common.util.Preconditions;
 
 import java.util.Map;
@@ -48,13 +49,13 @@ public class TokenAuthentication implements Authentication {
 
     @Override
     public void configure(Map<String, String> properties) {
-        Preconditions.checkNotEmpty(properties, "Properties cannot be empty when init TokenAuthentication");
+        Preconditions.expectNotEmpty(properties, "Properties cannot be empty when init TokenAuthentication");
         this.token = properties.get(TOKEN);
     }
 
     @Override
     public String toString() {
-        ObjectNode objectNode = OBJECT_MAPPER.createObjectNode();
+        ObjectNode objectNode = JsonUtils.OBJECT_MAPPER.createObjectNode();
         objectNode.put(TOKEN, this.getToken());
         return objectNode.toString();
     }

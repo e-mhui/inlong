@@ -18,15 +18,18 @@
 package org.apache.inlong.sdk.sort.api;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.pulsar.shade.org.apache.commons.lang.math.NumberUtils;
+import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.inlong.sdk.sort.entity.InLongTopic;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 
 public class SortClientConfig implements Serializable {
 
-    public static final String MONITOR_NAME = "read_stat";
+    public static final String MONITOR_NAME = "SortSdk";
 
     private static final long serialVersionUID = -7531960714809683830L;
 
@@ -36,6 +39,7 @@ public class SortClientConfig implements Serializable {
     private ReadCallback callback;
     private int callbackQueueSize = 100;
     private int pulsarReceiveQueueSize = 2000;
+    private long statsIntervalSeconds = -1;
     private int kafkaFetchWaitMs = 5000;
     private int kafkaFetchSizeBytes = 3 * 1024 * 1024;
     private int kafkaSocketRecvBufferSize = 5 * 1024 * 1024;
@@ -55,12 +59,24 @@ public class SortClientConfig implements Serializable {
     private int ackTimeoutSec = 0;
     private volatile boolean stopConsume = false;
     private boolean isPrometheusEnabled = true;
-    private int emptyPollSleepStepMs = 50;
+    private int emptyPollSleepStepMs = 10;
     private int maxEmptyPollSleepMs = 500;
     private int emptyPollTimes = 10;
+    private int cleanOldConsumerIntervalSec = 60;
+    private int maxConsumerSize = 5;
 
-    public SortClientConfig(String sortTaskId, String sortClusterName, InLongTopicChangeListener assignmentsListener,
-            ConsumeStrategy consumeStrategy, String localIp) {
+    private ConsumerSubsetType consumerSubsetType = ConsumerSubsetType.ALL;
+    private int consumerSubsetSize = 1;
+
+    private boolean topicStaticsEnabled = true;
+    private boolean partitionStaticsEnabled = true;
+
+    public SortClientConfig(
+            String sortTaskId,
+            String sortClusterName,
+            InLongTopicChangeListener assignmentsListener,
+            ConsumeStrategy consumeStrategy,
+            String localIp) {
         this.sortTaskId = sortTaskId;
         this.sortClusterName = sortClusterName;
         this.assignmentsListener = assignmentsListener;
@@ -174,6 +190,14 @@ public class SortClientConfig implements Serializable {
 
     public void setPulsarReceiveQueueSize(int pulsarReceiveQueueSize) {
         this.pulsarReceiveQueueSize = pulsarReceiveQueueSize;
+    }
+
+    public long getStatsIntervalSeconds() {
+        return statsIntervalSeconds;
+    }
+
+    public void setStatsIntervalSeconds(long statsIntervalSeconds) {
+        this.statsIntervalSeconds = statsIntervalSeconds;
     }
 
     public int getKafkaFetchWaitMs() {
@@ -314,6 +338,46 @@ public class SortClientConfig implements Serializable {
         this.emptyPollTimes = emptyPollTimes;
     }
 
+    public int getCleanOldConsumerIntervalSec() {
+        return cleanOldConsumerIntervalSec;
+    }
+
+    public void setCleanOldConsumerIntervalSec(int cleanOldConsumerIntervalSec) {
+        this.cleanOldConsumerIntervalSec = cleanOldConsumerIntervalSec;
+    }
+
+    public int getMaxConsumerSize() {
+        return maxConsumerSize;
+    }
+
+    public void setMaxConsumerSize(int maxConsumerSize) {
+        this.maxConsumerSize = maxConsumerSize;
+    }
+
+    public ConsumerSubsetType getConsumerSubsetType() {
+        return consumerSubsetType;
+    }
+
+    public void setConsumerSubsetSize(ConsumerSubsetType consumerSubsetType) {
+        this.consumerSubsetType = consumerSubsetType;
+    }
+
+    public int getConsumerSubsetSize() {
+        return consumerSubsetSize;
+    }
+
+    public void setConsumerSubsetSize(int consumerSubsetSize) {
+        this.consumerSubsetSize = consumerSubsetSize;
+    }
+
+    public boolean isTopicStaticsEnabled() {
+        return topicStaticsEnabled;
+    }
+
+    public boolean isPartitionStaticsEnabled() {
+        return partitionStaticsEnabled;
+    }
+
     /**
      * ConsumeStrategy
      */
@@ -340,39 +404,94 @@ public class SortClientConfig implements Serializable {
      * @param sortSdkParams
      */
     public void setParameters(Map<String, String> sortSdkParams) {
-        this.callbackQueueSize = NumberUtils.toInt(sortSdkParams.get("callbackQueueSize"), callbackQueueSize);
-        this.pulsarReceiveQueueSize = NumberUtils.toInt(sortSdkParams.get("pulsarReceiveQueueSize"),
+        this.callbackQueueSize = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.CALLBACK_QUEUE_SIZE),
+                callbackQueueSize);
+        this.pulsarReceiveQueueSize = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.PULSAR_RECEIVE_QUEUE_SIZE),
                 pulsarReceiveQueueSize);
-        this.kafkaFetchWaitMs = NumberUtils.toInt(sortSdkParams.get("kafkaFetchWaitMs"), kafkaFetchWaitMs);
-        this.kafkaFetchSizeBytes = NumberUtils.toInt(sortSdkParams.get("kafkaFetchSizeBytes"), kafkaFetchSizeBytes);
-        this.kafkaSocketRecvBufferSize = NumberUtils.toInt(sortSdkParams.get("kafkaSocketRecvBufferSize"),
+        this.statsIntervalSeconds = NumberUtils.toLong(sortSdkParams.get(ConfigConstants.STATS_INTERVAL_SECONDS),
+                statsIntervalSeconds);
+        this.kafkaFetchWaitMs = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.KAFKA_FETCH_WAIT_MS),
+                kafkaFetchWaitMs);
+        this.kafkaFetchSizeBytes = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.KAFKA_FETCH_SIZE_BYTES),
+                kafkaFetchSizeBytes);
+        this.kafkaSocketRecvBufferSize = NumberUtils.toInt(
+                sortSdkParams.get(ConfigConstants.KAFKA_SOCKET_RECV_BUFFER_SIZE),
                 kafkaSocketRecvBufferSize);
 
-        this.localIp = sortSdkParams.getOrDefault("localIp", localIp);
-        this.appName = sortSdkParams.getOrDefault("appName", appName);
-        this.serverName = sortSdkParams.getOrDefault("serverName", serverName);
-        this.containerId = sortSdkParams.getOrDefault("containerId", containerId);
-        this.instanceName = sortSdkParams.getOrDefault("instanceName", instanceName);
-        this.env = sortSdkParams.getOrDefault("env", env);
-        this.managerApiUrl = sortSdkParams.getOrDefault("managerApiUrl", managerApiUrl);
-        this.managerApiVersion = sortSdkParams.getOrDefault("managerApiVersion", managerApiVersion);
-        String strConsumeStrategy = sortSdkParams.getOrDefault("consumeStrategy", consumeStrategy.name());
-        String strManagerType = sortSdkParams.getOrDefault("topicManagerType",
-                TopicType.SINGLE_TOPIC.toString());
+        this.localIp = sortSdkParams.getOrDefault(ConfigConstants.LOCAL_IP, localIp);
+        this.appName = sortSdkParams.getOrDefault(ConfigConstants.APP_NAME, appName);
+        this.serverName = sortSdkParams.getOrDefault(ConfigConstants.SERVER_NAME, serverName);
+        this.containerId = sortSdkParams.getOrDefault(ConfigConstants.CONTAINER_ID, containerId);
+        this.instanceName = sortSdkParams.getOrDefault(ConfigConstants.INSTANCE_NAME, instanceName);
+        this.env = sortSdkParams.getOrDefault(ConfigConstants.ENV, env);
+        this.managerApiUrl = sortSdkParams.getOrDefault(ConfigConstants.MANAGER_API_URL, managerApiUrl);
+        this.managerApiVersion = sortSdkParams.getOrDefault(ConfigConstants.MANAGER_API_VERSION, managerApiVersion);
+        String strConsumeStrategy = sortSdkParams.getOrDefault(ConfigConstants.CONSUME_STRATEGY,
+                consumeStrategy.name());
+        String strManagerType = sortSdkParams.getOrDefault(ConfigConstants.TOPIC_MANAGER_TYPE,
+                TopicType.MULTI_TOPIC.toString());
         this.consumeStrategy = ConsumeStrategy.valueOf(strConsumeStrategy);
         this.topicType = TopicType.valueOf(strManagerType);
 
-        this.reportStatisticIntervalSec = NumberUtils.toInt(sortSdkParams.get("reportStatisticIntervalSec"),
+        this.reportStatisticIntervalSec = NumberUtils.toInt(
+                sortSdkParams.get(ConfigConstants.REPORT_STATISTIC_INTERVAL_SEC),
                 reportStatisticIntervalSec);
-        this.updateMetaDataIntervalSec = NumberUtils.toInt(sortSdkParams.get("updateMetaDataIntervalSec"),
+        this.updateMetaDataIntervalSec = NumberUtils.toInt(
+                sortSdkParams.get(ConfigConstants.UPDATE_META_DATA_INTERVAL_SEC),
                 updateMetaDataIntervalSec);
-        this.ackTimeoutSec = NumberUtils.toInt(sortSdkParams.get("ackTimeoutSec"), ackTimeoutSec);
+        this.ackTimeoutSec = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.ACK_TIMEOUT_SEC), ackTimeoutSec);
+        this.cleanOldConsumerIntervalSec = NumberUtils.toInt(
+                sortSdkParams.get(ConfigConstants.CLEAN_OLD_CONSUMER_INTERVAL_SEC),
+                cleanOldConsumerIntervalSec);
 
-        String strPrometheusEnabled = sortSdkParams.getOrDefault("isPrometheusEnabled", Boolean.TRUE.toString());
+        String strPrometheusEnabled = sortSdkParams.getOrDefault(ConfigConstants.IS_PROMETHEUS_ENABLED,
+                Boolean.TRUE.toString());
         this.isPrometheusEnabled = StringUtils.equalsIgnoreCase(strPrometheusEnabled, Boolean.TRUE.toString());
 
-        this.emptyPollSleepStepMs = NumberUtils.toInt(sortSdkParams.get("emptyPollSleepStepMs"), emptyPollSleepStepMs);
-        this.maxEmptyPollSleepMs = NumberUtils.toInt(sortSdkParams.get("maxEmptyPollSleepMs"), maxEmptyPollSleepMs);
-        this.emptyPollTimes = NumberUtils.toInt(sortSdkParams.get("emptyPollTimes"), emptyPollTimes);
+        this.emptyPollSleepStepMs = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.EMPTY_POLL_SLEEP_STEP_MS),
+                emptyPollSleepStepMs);
+        this.maxEmptyPollSleepMs = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.MAX_EMPTY_POLL_SLEEP_MS),
+                maxEmptyPollSleepMs);
+        this.emptyPollTimes = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.EMPTY_POLL_TIMES), emptyPollTimes);
+
+        this.maxConsumerSize = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.MAX_CONSUMER_SIZE),
+                maxConsumerSize);
+        this.consumerSubsetType = ConsumerSubsetType.convert(
+                sortSdkParams.getOrDefault(ConfigConstants.CONSUMER_SUBSET_TYPE, ConsumerSubsetType.CLUSTER.name()));
+        this.consumerSubsetSize = NumberUtils.toInt(sortSdkParams.get(ConfigConstants.CONSUMER_SUBSET_SIZE),
+                consumerSubsetSize);
+
+        String strTopicStaticsEnabled = sortSdkParams.getOrDefault(ConfigConstants.IS_TOPIC_STATICS_ENABLED,
+                Boolean.TRUE.toString());
+        this.topicStaticsEnabled = StringUtils.equalsIgnoreCase(strTopicStaticsEnabled, Boolean.TRUE.toString());
+        String strPartitionStaticsEnabled = sortSdkParams.getOrDefault(ConfigConstants.IS_PARTITION_STATICS_ENABLED,
+                Boolean.TRUE.toString());
+        this.partitionStaticsEnabled = StringUtils.equalsIgnoreCase(strPartitionStaticsEnabled,
+                Boolean.TRUE.toString());
     }
+
+    public List<InLongTopic> getConsumerSubset(List<InLongTopic> totalTopics) {
+        if (this.consumerSubsetSize <= 1
+                || this.containerId == null
+                || this.consumerSubsetType == ConsumerSubsetType.ALL) {
+            return totalTopics;
+        }
+        List<InLongTopic> subset = new ArrayList<>(totalTopics.size());
+        int containerHashId = Math.abs(this.containerId.hashCode()) % this.consumerSubsetSize;
+        for (InLongTopic topic : totalTopics) {
+            int topicHashId = 0;
+            if (this.consumerSubsetType == ConsumerSubsetType.CLUSTER) {
+                String hashString = topic.getInLongCluster().getClusterId();
+                topicHashId = Math.abs(hashString.hashCode()) % this.consumerSubsetSize;
+            } else {
+                String hashString = topic.getTopicKey();
+                topicHashId = Math.abs(hashString.hashCode()) % this.consumerSubsetSize;
+            }
+            if (containerHashId == topicHashId) {
+                subset.add(topic);
+            }
+        }
+        return subset;
+    }
+
 }

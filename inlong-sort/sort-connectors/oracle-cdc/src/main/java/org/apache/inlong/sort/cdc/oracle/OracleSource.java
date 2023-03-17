@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,13 +17,14 @@
 
 package org.apache.inlong.sort.cdc.oracle;
 
+import com.ververica.cdc.connectors.base.options.StartupOptions;
 import com.ververica.cdc.connectors.oracle.OracleValidator;
-import com.ververica.cdc.connectors.oracle.table.StartupOptions;
-import com.ververica.cdc.debezium.DebeziumDeserializationSchema;
-import com.ververica.cdc.debezium.internal.DebeziumOffset;
 import io.debezium.connector.oracle.OracleConnector;
 
 import java.util.Properties;
+import org.apache.inlong.sort.cdc.base.debezium.DebeziumDeserializationSchema;
+import org.apache.inlong.sort.cdc.base.debezium.internal.DebeziumOffset;
+import org.apache.inlong.sort.cdc.oracle.debezium.DebeziumSourceFunction;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -54,6 +54,7 @@ public class OracleSource {
         private DebeziumDeserializationSchema<T> deserializer;
         private String inlongMetric;
         private String inlongAudit;
+        private boolean sourceMultipleEnable;
 
         public Builder<T> hostname(String hostname) {
             this.hostname = hostname;
@@ -140,6 +141,11 @@ public class OracleSource {
             return this;
         }
 
+        public Builder<T> sourceMultipleEnable(boolean sourceMultipleEnable) {
+            this.sourceMultipleEnable = sourceMultipleEnable;
+            return this;
+        }
+
         public DebeziumSourceFunction<T> build() {
             Properties props = new Properties();
             props.setProperty("connector.class", OracleConnector.class.getCanonicalName());
@@ -183,7 +189,8 @@ public class OracleSource {
             }
 
             return new DebeziumSourceFunction<>(
-                    deserializer, props, specificOffset, new OracleValidator(props), inlongMetric, inlongAudit);
+                    deserializer, props, specificOffset, new OracleValidator(props),
+                    inlongMetric, inlongAudit, sourceMultipleEnable);
         }
     }
 }

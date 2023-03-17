@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -26,16 +26,16 @@ public enum StepStatus {
     STEP_STATUS_LOAD_DATA(1, "load_data", 0, 0),
     STEP_STATUS_WAIT_ONLINE(2, "wait_online", 0, 0),
     STEP_STATUS_WAIT_SYNC(3, "wait_sync", 0, 0),
-    STEP_STATUS_WAIT_SUBSCRIBE(4, "wait_sub", 55000, 40000),
-    STEP_STATUS_WAIT_PUBLISH(5, "wait_pub", 25000, 10000);
+    STEP_STATUS_WAIT_SUBSCRIBE(4, "wait_sub", 30000, 15000),
+    STEP_STATUS_WAIT_PUBLISH(5, "wait_pub", 5000, 0);
 
-    private int code;
-    private String description;
-    private long normalDelayDurIdnMs;
-    private long shortDelayDurIdnMs;
+    private final int code;
+    private final String description;
+    private final long normalDelayDurIdnMs;
+    private final long shortDelayDurIdnMs;
 
     StepStatus(int code, String description,
-               long normalDelayDurIdnMs, long shortDelayDurIdnMs) {
+            long normalDelayDurIdnMs, long shortDelayDurIdnMs) {
         this.code = code;
         this.description = description;
         this.normalDelayDurIdnMs = normalDelayDurIdnMs;

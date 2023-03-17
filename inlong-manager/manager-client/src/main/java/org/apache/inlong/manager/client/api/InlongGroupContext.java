@@ -26,8 +26,10 @@ import org.apache.commons.collections.MapUtils;
 import org.apache.inlong.manager.common.enums.SimpleGroupStatus;
 import org.apache.inlong.manager.common.enums.SimpleSourceStatus;
 import org.apache.inlong.manager.client.api.inner.InnerGroupContext;
+import org.apache.inlong.manager.common.enums.SortStatus;
 import org.apache.inlong.manager.pojo.group.InlongGroupExtInfo;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
+import org.apache.inlong.manager.pojo.group.InlongGroupStatusInfo;
 import org.apache.inlong.manager.pojo.source.StreamSource;
 import org.apache.inlong.manager.common.util.Preconditions;
 
@@ -57,15 +59,25 @@ public class InlongGroupContext implements Serializable {
 
     private SimpleGroupStatus status;
 
+    private SortStatus sortStatus = SortStatus.UNKNOWN;
+
+    private InlongGroupStatusInfo statusInfo;
+
     public InlongGroupContext(InnerGroupContext groupContext) {
         InlongGroupInfo groupInfo = groupContext.getGroupInfo();
-        Preconditions.checkNotNull(groupInfo, "inlong group info cannot be null");
+        Preconditions.expectNotNull(groupInfo, "inlong group info cannot be null");
         this.groupId = groupInfo.getInlongGroupId();
         this.groupName = groupInfo.getName();
         this.groupInfo = groupInfo;
         this.inlongStreamMap = groupContext.getStreamMap();
         this.status = SimpleGroupStatus.parseStatusByCode(groupInfo.getStatus());
         recheckState();
+        this.statusInfo = InlongGroupStatusInfo.builder()
+                .inlongGroupId(groupInfo.getInlongGroupId())
+                .originalStatus(groupInfo.getStatus())
+                .simpleGroupStatus(this.status)
+                .sortStatus(this.sortStatus)
+                .streamSources(getGroupSources()).build();
         this.extensions = Maps.newHashMap();
         List<InlongGroupExtInfo> extInfos = groupInfo.getExtList();
         if (CollectionUtils.isNotEmpty(extInfos)) {
@@ -73,6 +85,29 @@ public class InlongGroupContext implements Serializable {
                 extensions.put(extInfo.getKeyName(), extInfo.getKeyValue());
             });
         }
+    }
+
+    public void updateSortStatus(SortStatus sortStatus) {
+        this.sortStatus = sortStatus;
+        this.statusInfo.setSortStatus(sortStatus);
+    }
+
+    private List<StreamSource> getGroupSources() {
+        List<StreamSource> groupSources = Lists.newArrayList();
+        this.inlongStreamMap.values().forEach(inlongStream -> {
+            Map<String, StreamSource> sources = inlongStream.getSources();
+            if (MapUtils.isNotEmpty(sources)) {
+                for (Map.Entry<String, StreamSource> entry : sources.entrySet()) {
+                    StreamSource source = entry.getValue();
+                    // when template id is null it is considered as normal source other than template source
+                    // sub sources are filtered because they are already collected in template source's sub source list
+                    if (source != null && source.getTemplateId() == null) {
+                        groupSources.add(source);
+                    }
+                }
+            }
+        });
+        return groupSources;
     }
 
     private void recheckState() {

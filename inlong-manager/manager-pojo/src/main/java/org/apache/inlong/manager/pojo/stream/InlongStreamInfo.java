@@ -21,8 +21,8 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.apache.inlong.manager.common.util.CommonBeanUtils;
 import org.apache.inlong.manager.pojo.sink.StreamSink;
@@ -36,11 +36,13 @@ import java.util.List;
  * Inlong stream info
  */
 @Data
-@Builder
+@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @ApiModel("Inlong stream info")
-public class InlongStreamInfo {
+public class InlongStreamInfo extends BaseInlongStream {
+
+    public static final int ENABLE_WRAP_WITH_INLONG_MSG = 1;
 
     @ApiModelProperty(value = "Primary key")
     private Integer id;
@@ -57,8 +59,7 @@ public class InlongStreamInfo {
     @ApiModelProperty(value = "Inlong stream description")
     private String description;
 
-    @ApiModelProperty(value = "MQ resource for inlong stream. Default: ${inlongStreamId}",
-            notes = "in inlong stream, TubeMQ corresponds to filter consumption ID, Pulsar corresponds to Topic")
+    @ApiModelProperty(value = "MQ resource for inlong stream. Default: ${inlongStreamId}", notes = "in inlong stream, TubeMQ corresponds to filter consumption ID, Pulsar corresponds to Topic")
     private String mqResource;
 
     @ApiModelProperty(value = "Data type, including: TEXT, KV, etc.")
@@ -67,17 +68,15 @@ public class InlongStreamInfo {
     @ApiModelProperty(value = "Data encoding format: UTF-8, GBK")
     private String dataEncoding;
 
-    @ApiModelProperty(value = "Data separator, stored as ASCII code")
+    @ApiModelProperty(value = "Data separator")
     private String dataSeparator;
 
-    @ApiModelProperty(value = "Data field escape symbol, stored as ASCII code")
+    @ApiModelProperty(value = "Data field escape symbol")
     private String dataEscapeChar;
 
-    @ApiModelProperty(value = "Whether to send synchronously, 0: no, 1: yes",
-            notes = "Each task under this stream sends data synchronously, "
-                    + "which will affect the throughput of data collection, please choose carefully")
-    @Builder.Default
-    private Integer syncSend = 0;
+    @ApiModelProperty(value = "Whether to send synchronously, 0: no, 1: yes", notes = "Each task under this stream sends data synchronously, "
+            + "which will affect the throughput of data collection, please choose carefully")
+    private Integer syncSend;
 
     @ApiModelProperty(value = "Number of access items per day, unit: 10,000 items per day")
     private Integer dailyRecords;
@@ -103,10 +102,6 @@ public class InlongStreamInfo {
     @ApiModelProperty(value = "Previous status")
     private Integer previousStatus;
 
-    @ApiModelProperty(value = "is deleted? 0: deleted, 1: not deleted")
-    @Builder.Default
-    private Integer isDeleted = 0;
-
     @ApiModelProperty(value = "Name of creator")
     private String creator;
 
@@ -126,19 +121,19 @@ public class InlongStreamInfo {
     private List<InlongStreamExtInfo> extList;
 
     @ApiModelProperty("Stream source infos")
-    @Builder.Default
     private List<StreamSource> sourceList = new ArrayList<>();
 
     @ApiModelProperty("Stream sink infos")
-    @Builder.Default
     private List<StreamSink> sinkList = new ArrayList<>();
 
     @ApiModelProperty(value = "Version number")
     private Integer version;
 
-    public InlongStreamResponse genResponse() {
-        return CommonBeanUtils.copyProperties(this, InlongStreamResponse::new);
-    }
+    @ApiModelProperty(value = "Whether the message body wrapped with InlongMsg")
+    private Boolean wrapWithInlongMsg = true;
+
+    @ApiModelProperty(value = "Whether to ignore the parse errors of field value")
+    private Boolean ignoreParseError = true;
 
     public InlongStreamRequest genRequest() {
         return CommonBeanUtils.copyProperties(this, InlongStreamRequest::new);

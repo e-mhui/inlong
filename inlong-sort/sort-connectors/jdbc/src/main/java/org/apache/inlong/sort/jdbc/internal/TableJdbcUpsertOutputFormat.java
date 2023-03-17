@@ -1,12 +1,12 @@
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,9 +27,13 @@ import org.apache.flink.connector.jdbc.internal.executor.JdbcBatchStatementExecu
 import org.apache.flink.connector.jdbc.internal.options.JdbcDmlOptions;
 import org.apache.flink.connector.jdbc.statement.FieldNamedPreparedStatementImpl;
 import org.apache.flink.types.Row;
+import org.apache.inlong.sort.base.dirty.DirtyOptions;
+import org.apache.inlong.sort.base.dirty.DirtyType;
+import org.apache.inlong.sort.base.dirty.sink.DirtySink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -46,27 +50,30 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  * Add an option `inlong.metric` to support metrics.
  */
 class TableJdbcUpsertOutputFormat
-        extends JdbcBatchingOutputFormat<
-        Tuple2<Boolean, Row>, Row, JdbcBatchStatementExecutor<Row>> {
+        extends
+            JdbcBatchingOutputFormat<Tuple2<Boolean, Row>, Row, JdbcBatchStatementExecutor<Row>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(TableJdbcUpsertOutputFormat.class);
-    private final StatementExecutorFactory<JdbcBatchStatementExecutor<Row>>
-            deleteStatementExecutorFactory;
+    private final StatementExecutorFactory<JdbcBatchStatementExecutor<Row>> deleteStatementExecutorFactory;
     private JdbcBatchStatementExecutor<Row> deleteExecutor;
 
     TableJdbcUpsertOutputFormat(
             JdbcConnectionProvider connectionProvider,
             JdbcDmlOptions dmlOptions,
             JdbcExecutionOptions batchOptions,
-            String inLongMetric,
-            String auditHostAndPorts) {
+            String inlongMetric,
+            String auditHostAndPorts,
+            DirtyOptions dirtyOptions,
+            @Nullable DirtySink<Object> dirtySink) {
         this(
                 connectionProvider,
                 batchOptions,
                 ctx -> createUpsertRowExecutor(dmlOptions, ctx),
                 ctx -> createDeleteExecutor(dmlOptions, ctx),
-                inLongMetric,
-                auditHostAndPorts);
+                inlongMetric,
+                auditHostAndPorts,
+                dirtyOptions,
+                dirtySink);
     }
 
     @VisibleForTesting
@@ -74,13 +81,13 @@ class TableJdbcUpsertOutputFormat
             JdbcConnectionProvider connectionProvider,
             JdbcExecutionOptions batchOptions,
             StatementExecutorFactory<JdbcBatchStatementExecutor<Row>> statementExecutorFactory,
-            StatementExecutorFactory<JdbcBatchStatementExecutor<Row>>
-                    deleteStatementExecutorFactory,
-            String inLongMetric,
-            String auditHostAndPorts
-    ) {
+            StatementExecutorFactory<JdbcBatchStatementExecutor<Row>> deleteStatementExecutorFactory,
+            String inlongMetric,
+            String auditHostAndPorts,
+            DirtyOptions dirtyOptions,
+            @Nullable DirtySink<Object> dirtySink) {
         super(connectionProvider, batchOptions, statementExecutorFactory, tuple2 -> tuple2.f1,
-                inLongMetric, auditHostAndPorts);
+                inlongMetric, auditHostAndPorts, dirtyOptions, dirtySink);
         this.deleteStatementExecutorFactory = deleteStatementExecutorFactory;
     }
 
@@ -109,9 +116,8 @@ class TableJdbcUpsertOutputFormat
         return JdbcBatchStatementExecutor.keyed(
                 sql,
                 createRowKeyExtractor(pkFields),
-                (st, record) ->
-                        setRecordToStatement(
-                                st, pkTypes, createRowKeyExtractor(pkFields).apply(record)));
+                (st, record) -> setRecordToStatement(
+                        st, pkTypes, createRowKeyExtractor(pkFields).apply(record)));
     }
 
     private static JdbcBatchStatementExecutor<Row> createUpsertRowExecutor(
@@ -131,37 +137,35 @@ class TableJdbcUpsertOutputFormat
                 .getUpsertStatement(
                         opt.getTableName(), opt.getFieldNames(), opt.getKeyFields().get())
                 .map(
-                        sql ->
-                                createSimpleRowExecutor(
-                                        parseNamedStatement(sql),
-                                        opt.getFieldTypes(),
-                                        ctx.getExecutionConfig().isObjectReuseEnabled()))
+                        sql -> createSimpleRowExecutor(
+                                parseNamedStatement(sql),
+                                opt.getFieldTypes(),
+                                ctx.getExecutionConfig().isObjectReuseEnabled()))
                 .orElseGet(
-                        () ->
-                                new InsertOrUpdateJdbcExecutor<>(
-                                        parseNamedStatement(
-                                                opt.getDialect()
-                                                        .getRowExistsStatement(
-                                                                opt.getTableName(),
-                                                                opt.getKeyFields().get())),
-                                        parseNamedStatement(
-                                                opt.getDialect()
-                                                        .getInsertIntoStatement(
-                                                                opt.getTableName(),
-                                                                opt.getFieldNames())),
-                                        parseNamedStatement(
-                                                opt.getDialect()
-                                                        .getUpdateStatement(
-                                                                opt.getTableName(),
-                                                                opt.getFieldNames(),
-                                                                opt.getKeyFields().get())),
-                                        createRowJdbcStatementBuilder(pkTypes),
-                                        createRowJdbcStatementBuilder(opt.getFieldTypes()),
-                                        createRowJdbcStatementBuilder(opt.getFieldTypes()),
-                                        createRowKeyExtractor(pkFields),
-                                        ctx.getExecutionConfig().isObjectReuseEnabled()
-                                                ? Row::copy
-                                                : Function.identity()));
+                        () -> new InsertOrUpdateJdbcExecutor<>(
+                                parseNamedStatement(
+                                        opt.getDialect()
+                                                .getRowExistsStatement(
+                                                        opt.getTableName(),
+                                                        opt.getKeyFields().get())),
+                                parseNamedStatement(
+                                        opt.getDialect()
+                                                .getInsertIntoStatement(
+                                                        opt.getTableName(),
+                                                        opt.getFieldNames())),
+                                parseNamedStatement(
+                                        opt.getDialect()
+                                                .getUpdateStatement(
+                                                        opt.getTableName(),
+                                                        opt.getFieldNames(),
+                                                        opt.getKeyFields().get())),
+                                createRowJdbcStatementBuilder(pkTypes),
+                                createRowJdbcStatementBuilder(opt.getFieldTypes()),
+                                createRowJdbcStatementBuilder(opt.getFieldTypes()),
+                                createRowKeyExtractor(pkFields),
+                                ctx.getExecutionConfig().isObjectReuseEnabled()
+                                        ? Row::copy
+                                        : Function.identity()));
     }
 
     private static String parseNamedStatement(String statement) {
@@ -184,11 +188,16 @@ class TableJdbcUpsertOutputFormat
     }
 
     @Override
-    protected void addToBatch(Tuple2<Boolean, Row> original, Row extracted) throws SQLException {
+    protected void addToBatch(Tuple2<Boolean, Row> original, Row extracted) {
         if (original.f0) {
             super.addToBatch(original, extracted);
         } else {
-            deleteExecutor.addToBatch(extracted);
+            try {
+                deleteExecutor.addToBatch(extracted);
+            } catch (Exception e) {
+                LOG.error(String.format("DataTypeMappingError, data: %s", extracted), e);
+                handleDirtyData(extracted, DirtyType.DATA_TYPE_MAPPING_ERROR, e);
+            }
         }
     }
 

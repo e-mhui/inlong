@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -26,6 +26,7 @@ import javax.servlet.http.HttpServletRequest;
 import org.apache.inlong.tubemq.corebase.cluster.BrokerInfo;
 import org.apache.inlong.tubemq.corebase.cluster.TopicInfo;
 import org.apache.inlong.tubemq.corebase.utils.TStringUtils;
+import org.apache.inlong.tubemq.corebase.utils.Tuple3;
 import org.apache.inlong.tubemq.server.common.TubeServerVersion;
 import org.apache.inlong.tubemq.server.master.TMaster;
 import org.apache.inlong.tubemq.server.master.nodemanage.nodebroker.BrokerRunManager;
@@ -47,13 +48,15 @@ public class BrokerList implements Action {
         HttpServletRequest req = context.getReq();
         String strPageNum = req.getParameter("page_num");
         String strPageSize = req.getParameter("page_size");
-        //String strTopicName = req.getParameter("topicName");
-        //String strConsumeGroup = req.getParameter("consumeGroup");
+        // String strTopicName = req.getParameter("topicName");
+        // String strConsumeGroup = req.getParameter("consumeGroup");
         int pageNum = TStringUtils.isNotEmpty(strPageNum)
-                ? Integer.parseInt(strPageNum) : 1;
+                ? Integer.parseInt(strPageNum)
+                : 1;
         pageNum = pageNum <= 0 ? 1 : pageNum;
         int pageSize = TStringUtils.isNotEmpty(strPageSize)
-                ? Integer.parseInt(strPageSize) : 10;
+                ? Integer.parseInt(strPageSize)
+                : 10;
         pageSize = Math.max(pageSize, 10);
         BrokerRunManager brokerRunManager = master.getBrokerRunManager();
         List<BrokerInfo> brokerInfoList =
@@ -66,8 +69,9 @@ public class BrokerList implements Action {
         // *************************************************************************************
 
         int totalPage =
-                brokerInfoList.size() % pageSize == 0 ? brokerInfoList.size() / pageSize : brokerInfoList
-                        .size() / pageSize + 1;
+                brokerInfoList.size() % pageSize == 0 ? brokerInfoList.size() / pageSize
+                        : brokerInfoList
+                                .size() / pageSize + 1;
         if (pageNum > totalPage) {
             pageNum = totalPage;
         }
@@ -81,22 +85,22 @@ public class BrokerList implements Action {
             int fromIndex = pageSize * (pageNum - 1);
             int toIndex =
                     Math.min(fromIndex + pageSize, brokerInfoList.size());
+            Tuple3<Boolean, Boolean, List<TopicInfo>> topicInfoTuple = new Tuple3<>();
             List<BrokerInfo> firstPageList = brokerInfoList.subList(fromIndex, toIndex);
             brokerVOList = new ArrayList<>(brokerInfoList.size());
             for (BrokerInfo brokerInfo : firstPageList) {
                 BrokerVO brokerVO = new BrokerVO();
                 brokerVO.setId(brokerInfo.getBrokerId());
                 brokerVO.setIp(brokerInfo.getHost());
-                List<TopicInfo> topicInfoList =
-                        brokerRunManager.getPubBrokerPushedTopicInfo(brokerInfo.getBrokerId());
-                brokerVO.setTopicCount(topicInfoList.size());
+                brokerRunManager.getPubBrokerPushedTopicInfo(brokerInfo.getBrokerId(), topicInfoTuple);
+                brokerVO.setTopicCount(topicInfoTuple.getF2().size());
                 int totalPartitionNum = 0;
-                for (TopicInfo topicInfo : topicInfoList) {
+                for (TopicInfo topicInfo : topicInfoTuple.getF2()) {
                     totalPartitionNum += topicInfo.getPartitionNum();
                 }
                 brokerVO.setPartitionCount(totalPartitionNum);
-                brokerVO.setReadable(true);
-                brokerVO.setWritable(true);
+                brokerVO.setReadable(topicInfoTuple.getF1());
+                brokerVO.setWritable(topicInfoTuple.getF0());
                 brokerVO.setVersion(TubeServerVersion.SERVER_VERSION);
                 brokerVO.setStatus(1);
                 brokerVO.setLastOpTime(new Date());
@@ -114,6 +118,7 @@ public class BrokerList implements Action {
     }
 
     public class BrokerComparator implements Comparator<BrokerInfo> {
+
         @Override
         public int compare(BrokerInfo o1, BrokerInfo o2) {
             return o1.getBrokerId() - o2.getBrokerId();

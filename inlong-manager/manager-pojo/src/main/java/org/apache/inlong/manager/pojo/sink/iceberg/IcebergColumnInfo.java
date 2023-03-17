@@ -17,8 +17,6 @@
 
 package org.apache.inlong.manager.pojo.sink.iceberg;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -27,7 +25,7 @@ import lombok.NoArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
-
+import org.apache.inlong.manager.common.util.JsonUtils;
 
 /**
  * Iceberg column info
@@ -37,8 +35,6 @@ import org.apache.inlong.manager.common.exceptions.BusinessException;
 @NoArgsConstructor
 @AllArgsConstructor
 public class IcebergColumnInfo {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @ApiModelProperty("Length of fixed type")
     private Integer length;
@@ -72,8 +68,7 @@ public class IcebergColumnInfo {
             return new IcebergColumnInfo();
         }
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, IcebergColumnInfo.class);
+            return JsonUtils.parseObject(extParams, IcebergColumnInfo.class);
         } catch (Exception e) {
             throw new BusinessException(ErrorCodeEnum.SINK_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
         }

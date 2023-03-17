@@ -18,14 +18,16 @@
 package org.apache.inlong.manager.service.sink;
 
 import com.github.pagehelper.Page;
-import com.github.pagehelper.PageInfo;
+import org.apache.inlong.manager.common.enums.SinkStatus;
 import org.apache.inlong.manager.dao.entity.StreamSinkEntity;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.sink.SinkField;
 import org.apache.inlong.manager.pojo.sink.SinkRequest;
 import org.apache.inlong.manager.pojo.sink.StreamSink;
 
 import javax.validation.constraints.NotNull;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Interface of the sink operator
@@ -68,15 +70,16 @@ public interface StreamSinkOperator {
      * @param entityPage sink entity page
      * @return sink info list
      */
-    PageInfo<? extends StreamSink> getPageInfo(Page<StreamSinkEntity> entityPage);
+    PageResult<? extends StreamSink> getPageInfo(Page<StreamSinkEntity> entityPage);
 
     /**
      * Update the sink info.
      *
      * @param request sink info needs to update
+     * @param nextStatus next status
      * @param operator name of the operator
      */
-    void updateOpt(SinkRequest request, String operator);
+    void updateOpt(SinkRequest request, SinkStatus nextStatus, String operator);
 
     /**
      * Update the sink fields.
@@ -90,10 +93,25 @@ public interface StreamSinkOperator {
     void updateFieldOpt(Boolean onlyAdd, SinkRequest request);
 
     /**
+     * Save the sink fields.
+     *
+     * @param request sink request info needs to save
+     */
+    void saveFieldOpt(SinkRequest request);
+
+    /**
      * Delete the sink info.
      *
      * @param entity sink info needs to delete
      * @param operator name of the operator
      */
     void deleteOpt(StreamSinkEntity entity, String operator);
+
+    /**
+     * Parse stream sink to id params
+     *
+     * @param streamSink
+     * @return
+     */
+    Map<String, String> parse2IdParams(StreamSinkEntity streamSink, List<String> fields);
 }

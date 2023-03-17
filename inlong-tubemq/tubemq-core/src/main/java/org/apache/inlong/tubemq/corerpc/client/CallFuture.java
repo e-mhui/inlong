@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -27,6 +27,8 @@ import java.util.concurrent.TimeoutException;
  * A Future implementation for RPCs.
  */
 public class CallFuture<T> implements Future<T>, Callback<T> {
+
+    private static final String errMsgInfo = "Wait response message timeout!";
     private final CountDownLatch latch = new CountDownLatch(1);
     private final Callback<T> chainedCallback;
     private T result = null;
@@ -131,7 +133,7 @@ public class CallFuture<T> implements Future<T>, Callback<T> {
             }
             return result;
         } else {
-            throw new TimeoutException();
+            throw new TimeoutException(errMsgInfo);
         }
     }
 
@@ -155,7 +157,7 @@ public class CallFuture<T> implements Future<T>, Callback<T> {
     public void await(long timeout, TimeUnit unit)
             throws InterruptedException, TimeoutException {
         if (!latch.await(timeout, unit)) {
-            throw new TimeoutException();
+            throw new TimeoutException(errMsgInfo);
         }
     }
 

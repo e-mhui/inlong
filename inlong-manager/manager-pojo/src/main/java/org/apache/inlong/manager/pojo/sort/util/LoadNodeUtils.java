@@ -21,30 +21,36 @@ import com.google.common.collect.Lists;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.inlong.common.enums.DataTypeEnum;
-import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.consts.SinkType;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.enums.FieldType;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
 import org.apache.inlong.manager.pojo.sink.SinkField;
 import org.apache.inlong.manager.pojo.sink.StreamSink;
 import org.apache.inlong.manager.pojo.sink.ck.ClickHouseSink;
-import org.apache.inlong.manager.pojo.sink.dlciceberg.DLCIcebergSink;
+import org.apache.inlong.manager.pojo.sink.doris.DorisSink;
 import org.apache.inlong.manager.pojo.sink.es.ElasticsearchSink;
 import org.apache.inlong.manager.pojo.sink.greenplum.GreenplumSink;
 import org.apache.inlong.manager.pojo.sink.hbase.HBaseSink;
 import org.apache.inlong.manager.pojo.sink.hdfs.HDFSSink;
 import org.apache.inlong.manager.pojo.sink.hive.HivePartitionField;
 import org.apache.inlong.manager.pojo.sink.hive.HiveSink;
+import org.apache.inlong.manager.pojo.sink.hudi.HudiSink;
 import org.apache.inlong.manager.pojo.sink.iceberg.IcebergSink;
 import org.apache.inlong.manager.pojo.sink.kafka.KafkaSink;
+import org.apache.inlong.manager.pojo.sink.kudu.KuduSink;
 import org.apache.inlong.manager.pojo.sink.mysql.MySQLSink;
+import org.apache.inlong.manager.pojo.sink.mysql.MySQLSinkDTO;
 import org.apache.inlong.manager.pojo.sink.oracle.OracleSink;
 import org.apache.inlong.manager.pojo.sink.postgresql.PostgreSQLSink;
+import org.apache.inlong.manager.pojo.sink.redis.RedisSink;
 import org.apache.inlong.manager.pojo.sink.sqlserver.SQLServerSink;
+import org.apache.inlong.manager.pojo.sink.starrocks.StarRocksSink;
 import org.apache.inlong.manager.pojo.sink.tdsqlpostgresql.TDSQLPostgreSQLSink;
 import org.apache.inlong.manager.pojo.stream.StreamField;
 import org.apache.inlong.sort.formats.common.StringTypeInfo;
 import org.apache.inlong.sort.protocol.FieldInfo;
+import org.apache.inlong.sort.protocol.constant.HudiConstant;
 import org.apache.inlong.sort.protocol.constant.IcebergConstant.CatalogType;
 import org.apache.inlong.sort.protocol.node.LoadNode;
 import org.apache.inlong.sort.protocol.node.format.AvroFormat;
@@ -52,31 +58,37 @@ import org.apache.inlong.sort.protocol.node.format.CanalJsonFormat;
 import org.apache.inlong.sort.protocol.node.format.CsvFormat;
 import org.apache.inlong.sort.protocol.node.format.DebeziumJsonFormat;
 import org.apache.inlong.sort.protocol.node.format.Format;
+import org.apache.inlong.sort.protocol.node.format.InLongMsgFormat;
 import org.apache.inlong.sort.protocol.node.format.JsonFormat;
+import org.apache.inlong.sort.protocol.node.format.RawFormat;
 import org.apache.inlong.sort.protocol.node.load.ClickHouseLoadNode;
-import org.apache.inlong.sort.protocol.node.load.DLCIcebergLoadNode;
+import org.apache.inlong.sort.protocol.node.load.DorisLoadNode;
 import org.apache.inlong.sort.protocol.node.load.ElasticsearchLoadNode;
 import org.apache.inlong.sort.protocol.node.load.FileSystemLoadNode;
 import org.apache.inlong.sort.protocol.node.load.GreenplumLoadNode;
 import org.apache.inlong.sort.protocol.node.load.HbaseLoadNode;
 import org.apache.inlong.sort.protocol.node.load.HiveLoadNode;
+import org.apache.inlong.sort.protocol.node.load.HudiLoadNode;
 import org.apache.inlong.sort.protocol.node.load.IcebergLoadNode;
 import org.apache.inlong.sort.protocol.node.load.KafkaLoadNode;
+import org.apache.inlong.sort.protocol.node.load.KuduLoadNode;
 import org.apache.inlong.sort.protocol.node.load.MySqlLoadNode;
 import org.apache.inlong.sort.protocol.node.load.OracleLoadNode;
 import org.apache.inlong.sort.protocol.node.load.PostgresLoadNode;
+import org.apache.inlong.sort.protocol.node.load.RedisLoadNode;
 import org.apache.inlong.sort.protocol.node.load.SqlServerLoadNode;
+import org.apache.inlong.sort.protocol.node.load.StarRocksLoadNode;
 import org.apache.inlong.sort.protocol.node.load.TDSQLPostgresLoadNode;
 import org.apache.inlong.sort.protocol.transformation.ConstantParam;
 import org.apache.inlong.sort.protocol.transformation.FieldRelation;
 import org.apache.inlong.sort.protocol.transformation.FunctionParam;
 import org.apache.inlong.sort.protocol.transformation.StringConstantParam;
+import org.apache.inlong.sort.protocol.transformation.function.CustomFunction;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.apache.inlong.sort.protocol.transformation.function.CustomFunction;
 
 /**
  * Util for load node info.
@@ -102,8 +114,7 @@ public class LoadNodeUtils {
         List<FieldInfo> fieldInfos = streamSink.getSinkFieldList().stream()
                 .map(field -> FieldInfoUtils.parseSinkFieldInfo(field, streamSink.getSinkName()))
                 .collect(Collectors.toList());
-        List<FieldRelation> fieldRelations = parseSinkFields(streamSink.getSinkFieldList(),
-                streamSink.getSinkName(), constantFieldMap);
+        List<FieldRelation> fieldRelations = parseSinkFields(streamSink.getSinkFieldList(), constantFieldMap);
         Map<String, String> properties = streamSink.getProperties().entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toString()));
         String sinkType = streamSink.getSinkType();
@@ -120,6 +131,8 @@ public class LoadNodeUtils {
                 return createLoadNode((ClickHouseSink) streamSink, fieldInfos, fieldRelations, properties);
             case SinkType.ICEBERG:
                 return createLoadNode((IcebergSink) streamSink, fieldInfos, fieldRelations, properties);
+            case SinkType.HUDI:
+                return createLoadNode((HudiSink) streamSink, fieldInfos, fieldRelations, properties);
             case SinkType.SQLSERVER:
                 return createLoadNode((SQLServerSink) streamSink, fieldInfos, fieldRelations, properties);
             case SinkType.ELASTICSEARCH:
@@ -134,8 +147,14 @@ public class LoadNodeUtils {
                 return createLoadNode((OracleSink) streamSink, fieldInfos, fieldRelations, properties);
             case SinkType.TDSQLPOSTGRESQL:
                 return createLoadNode((TDSQLPostgreSQLSink) streamSink, fieldInfos, fieldRelations, properties);
-            case SinkType.DLCICEBERG:
-                return createLoadNode((DLCIcebergSink) streamSink, fieldInfos, fieldRelations, properties);
+            case SinkType.DORIS:
+                return createLoadNode((DorisSink) streamSink, fieldInfos, fieldRelations, properties);
+            case SinkType.STARROCKS:
+                return createLoadNode((StarRocksSink) streamSink, fieldInfos, fieldRelations, properties);
+            case SinkType.KUDU:
+                return createLoadNode((KuduSink) streamSink, fieldInfos, fieldRelations, properties);
+            case SinkType.REDIS:
+                return createLoadNode((RedisSink) streamSink, fieldInfos, fieldRelations, properties);
             default:
                 throw new BusinessException(String.format("Unsupported sinkType=%s to create load node", sinkType));
         }
@@ -150,7 +169,7 @@ public class LoadNodeUtils {
         if (StringUtils.isNotEmpty(kafkaSink.getPartitionNum())) {
             sinkParallelism = Integer.parseInt(kafkaSink.getPartitionNum());
         }
-        DataTypeEnum dataType = DataTypeEnum.forName(kafkaSink.getSerializationType());
+        DataTypeEnum dataType = DataTypeEnum.forType(kafkaSink.getSerializationType());
         Format format;
         switch (dataType) {
             case CSV:
@@ -168,6 +187,9 @@ public class LoadNodeUtils {
             case DEBEZIUM_JSON:
                 format = new DebeziumJsonFormat();
                 break;
+            case RAW:
+                format = new RawFormat();
+                break;
             default:
                 throw new IllegalArgumentException(String.format("Unsupported dataType=%s for Kafka", dataType));
         }
@@ -184,8 +206,7 @@ public class LoadNodeUtils {
                 format,
                 sinkParallelism,
                 properties,
-                kafkaSink.getPrimaryKey()
-        );
+                kafkaSink.getPrimaryKey());
     }
 
     /**
@@ -198,7 +219,8 @@ public class LoadNodeUtils {
             partitionFields = hiveSink.getPartitionFieldList().stream()
                     .map(partitionField -> new FieldInfo(partitionField.getFieldName(), hiveSink.getSinkName(),
                             FieldInfoUtils.convertFieldFormat(partitionField.getFieldType(),
-                                    partitionField.getFieldFormat()))).collect(Collectors.toList());
+                                    partitionField.getFieldFormat())))
+                    .collect(Collectors.toList());
         }
         return new HiveLoadNode(
                 hiveSink.getSinkName(),
@@ -215,8 +237,7 @@ public class LoadNodeUtils {
                 hiveSink.getHiveConfDir(),
                 hiveSink.getHiveVersion(),
                 null,
-                partitionFields
-        );
+                partitionFields);
     }
 
     /**
@@ -240,8 +261,7 @@ public class LoadNodeUtils {
                 hbaseSink.getBufferFlushMaxSize(),
                 hbaseSink.getZkNodeParent(),
                 hbaseSink.getBufferFlushMaxRows(),
-                hbaseSink.getBufferFlushInterval()
-        );
+                hbaseSink.getBufferFlushInterval());
     }
 
     /**
@@ -262,8 +282,7 @@ public class LoadNodeUtils {
                 postgreSQLSink.getUsername(),
                 postgreSQLSink.getPassword(),
                 postgreSQLSink.getDbName() + "." + postgreSQLSink.getTableName(),
-                postgreSQLSink.getPrimaryKey()
-        );
+                postgreSQLSink.getPrimaryKey());
     }
 
     /**
@@ -280,12 +299,175 @@ public class LoadNodeUtils {
                 null,
                 null,
                 properties,
-                ckSink.getTableName(),
+                ckSink.getDbName() + "." + ckSink.getTableName(),
                 ckSink.getJdbcUrl() + "/" + ckSink.getDbName(),
                 ckSink.getUsername(),
                 ckSink.getPassword(),
-                ckSink.getPrimaryKey()
-        );
+                ckSink.getPrimaryKey());
+    }
+
+    /**
+     * Create load node of Doris.
+     */
+    public static DorisLoadNode createLoadNode(DorisSink dorisSink, List<FieldInfo> fieldInfos,
+            List<FieldRelation> fieldRelations, Map<String, String> properties) {
+        Format format = null;
+        if (dorisSink.getSinkMultipleEnable() != null && dorisSink.getSinkMultipleEnable() && StringUtils.isNotBlank(
+                dorisSink.getSinkMultipleFormat())) {
+            DataTypeEnum dataType = DataTypeEnum.forType(dorisSink.getSinkMultipleFormat());
+            switch (dataType) {
+                case CANAL:
+                    format = new CanalJsonFormat();
+                    break;
+                case DEBEZIUM_JSON:
+                    format = new DebeziumJsonFormat();
+                    break;
+                default:
+                    throw new IllegalArgumentException(String.format("Unsupported dataType=%s for doris", dataType));
+            }
+        }
+        return new DorisLoadNode(
+                dorisSink.getSinkName(),
+                dorisSink.getSinkName(),
+                fieldInfos,
+                fieldRelations,
+                null,
+                null,
+                null,
+                properties,
+                dorisSink.getFeNodes(),
+                dorisSink.getUsername(),
+                dorisSink.getPassword(),
+                dorisSink.getTableIdentifier(),
+                null,
+                dorisSink.getSinkMultipleEnable(),
+                format,
+                dorisSink.getDatabasePattern(),
+                dorisSink.getTablePattern());
+    }
+
+    /**
+     * Create load node of StarRocks.
+     */
+    public static StarRocksLoadNode createLoadNode(StarRocksSink starRocksSink, List<FieldInfo> fieldInfos,
+            List<FieldRelation> fieldRelations, Map<String, String> properties) {
+        Format format = null;
+        if (starRocksSink.getSinkMultipleEnable() != null && starRocksSink.getSinkMultipleEnable()
+                && StringUtils.isNotBlank(
+                        starRocksSink.getSinkMultipleFormat())) {
+            DataTypeEnum dataType = DataTypeEnum.forType(starRocksSink.getSinkMultipleFormat());
+            switch (dataType) {
+                case CANAL:
+                    format = new CanalJsonFormat();
+                    break;
+                case DEBEZIUM_JSON:
+                    format = new DebeziumJsonFormat();
+                    break;
+                default:
+                    throw new IllegalArgumentException(
+                            String.format("Unsupported dataType=%s for StarRocks", dataType));
+            }
+        }
+        return new StarRocksLoadNode(
+                starRocksSink.getSinkName(),
+                starRocksSink.getSinkName(),
+                fieldInfos,
+                fieldRelations,
+                null,
+                null,
+                null,
+                properties,
+                starRocksSink.getJdbcUrl(),
+                starRocksSink.getLoadUrl(),
+                starRocksSink.getUsername(),
+                starRocksSink.getPassword(),
+                starRocksSink.getDatabaseName(),
+                starRocksSink.getTableName(),
+                starRocksSink.getPrimaryKey(),
+                starRocksSink.getSinkMultipleEnable(),
+                format,
+                starRocksSink.getDatabasePattern(),
+                starRocksSink.getTablePattern());
+    }
+
+    /**
+     * Create load node of Kudu.
+     */
+    public static KuduLoadNode createLoadNode(
+            KuduSink kuduSink,
+            List<FieldInfo> fieldInfos,
+            List<FieldRelation> fieldRelations,
+            Map<String, String> properties) {
+        return new KuduLoadNode(
+                kuduSink.getSinkName(),
+                kuduSink.getSinkName(),
+                fieldInfos,
+                fieldRelations,
+                null,
+                null,
+                null,
+                properties,
+                kuduSink.getMasters(),
+                kuduSink.getTableName(),
+                kuduSink.getPartitionKey());
+    }
+
+    private static LoadNode createLoadNode(
+            RedisSink redisSink,
+            List<FieldInfo> fieldInfos,
+            List<FieldRelation> fieldRelations,
+            Map<String, String> properties) {
+        String clusterMode = redisSink.getClusterMode();
+        String dataType = redisSink.getDataType();
+        String schemaMapMode = redisSink.getSchemaMapMode();
+        String host = redisSink.getHost();
+        Integer port = redisSink.getPort();
+        String clusterNodes = redisSink.getClusterNodes();
+        String sentinelMasterName = redisSink.getSentinelMasterName();
+        String sentinelsInfo = redisSink.getSentinelsInfo();
+        Integer database = redisSink.getDatabase();
+        String password = redisSink.getPassword();
+        Integer ttl = redisSink.getTtl();
+        Integer timeout = redisSink.getTimeout();
+        Integer soTimeout = redisSink.getSoTimeout();
+        Integer maxTotal = redisSink.getMaxTotal();
+        Integer maxIdle = redisSink.getMaxIdle();
+        Integer minIdle = redisSink.getMinIdle();
+        Integer maxRetries = redisSink.getMaxRetries();
+
+        Format format = parsingFormat(
+                redisSink.getFormatDataType(),
+                false,
+                redisSink.getFormatDataSeparator(),
+                false);
+
+        return new RedisLoadNode(
+                redisSink.getSinkName(),
+                redisSink.getSinkName(),
+                fieldInfos,
+                fieldRelations,
+                null,
+                null,
+                null,
+                properties,
+                clusterMode,
+                dataType,
+                schemaMapMode,
+                host,
+                port,
+                clusterNodes,
+                sentinelMasterName,
+                sentinelsInfo,
+                database,
+                password,
+                ttl,
+                format,
+                timeout,
+                soTimeout,
+                maxTotal,
+                maxIdle,
+                minIdle,
+                maxRetries);
     }
 
     /**
@@ -308,8 +490,33 @@ public class LoadNodeUtils {
                 icebergSink.getPrimaryKey(),
                 catalogType,
                 icebergSink.getCatalogUri(),
-                icebergSink.getWarehouse()
-        );
+                icebergSink.getWarehouse());
+    }
+
+    /**
+     * Create load node of Hudi.
+     */
+    public static HudiLoadNode createLoadNode(HudiSink hudiSink, List<FieldInfo> fieldInfos,
+            List<FieldRelation> fieldRelations, Map<String, String> properties) {
+        HudiConstant.CatalogType catalogType = HudiConstant.CatalogType.forName(hudiSink.getCatalogType());
+
+        return new HudiLoadNode(
+                hudiSink.getSinkName(),
+                hudiSink.getSinkName(),
+                fieldInfos,
+                fieldRelations,
+                null,
+                null,
+                null,
+                properties,
+                hudiSink.getDbName(),
+                hudiSink.getTableName(),
+                hudiSink.getPrimaryKey(),
+                catalogType,
+                hudiSink.getCatalogUri(),
+                hudiSink.getWarehouse(),
+                hudiSink.getExtList(),
+                hudiSink.getPartitionKey());
     }
 
     /**
@@ -331,8 +538,7 @@ public class LoadNodeUtils {
                 sqlServerSink.getPassword(),
                 sqlServerSink.getSchemaName(),
                 sqlServerSink.getTableName(),
-                sqlServerSink.getPrimaryKey()
-        );
+                sqlServerSink.getPrimaryKey());
     }
 
     /**
@@ -350,13 +556,12 @@ public class LoadNodeUtils {
                 null,
                 properties,
                 elasticsearchSink.getIndexName(),
-                elasticsearchSink.getHost(),
+                elasticsearchSink.getHosts(),
                 elasticsearchSink.getUsername(),
                 elasticsearchSink.getPassword(),
                 elasticsearchSink.getDocumentType(),
                 elasticsearchSink.getPrimaryKey(),
-                elasticsearchSink.getEsVersion()
-        );
+                elasticsearchSink.getEsVersion());
     }
 
     /**
@@ -384,8 +589,7 @@ public class LoadNodeUtils {
                 null,
                 properties,
                 partitionFields,
-                hdfsSink.getServerTimeZone()
-        );
+                hdfsSink.getServerTimeZone());
     }
 
     /**
@@ -423,7 +627,7 @@ public class LoadNodeUtils {
                 null,
                 null,
                 properties,
-                mysqlSink.getJdbcUrl(),
+                MySQLSinkDTO.setDbNameToUrl(mysqlSink.getJdbcUrl(), mysqlSink.getDatabaseName()),
                 mysqlSink.getUsername(),
                 mysqlSink.getPassword(),
                 mysqlSink.getTableName(),
@@ -473,31 +677,9 @@ public class LoadNodeUtils {
     }
 
     /**
-     * Create load node of DLCIceberg.
-     */
-    public static DLCIcebergLoadNode createLoadNode(DLCIcebergSink dlcIcebergSink, List<FieldInfo> fieldInfos,
-            List<FieldRelation> fieldRelations, Map<String, String> properties) {
-        return new DLCIcebergLoadNode(
-                dlcIcebergSink.getSinkName(),
-                dlcIcebergSink.getSinkName(),
-                fieldInfos,
-                fieldRelations,
-                null,
-                null,
-                null,
-                properties,
-                dlcIcebergSink.getDbName(),
-                dlcIcebergSink.getTableName(),
-                dlcIcebergSink.getPrimaryKey(),
-                dlcIcebergSink.getCatalogUri(),
-                dlcIcebergSink.getWarehouse()
-        );
-    }
-
-    /**
      * Parse information field of data sink.
      */
-    public static List<FieldRelation> parseSinkFields(List<SinkField> fieldList, String sinkName,
+    public static List<FieldRelation> parseSinkFields(List<SinkField> fieldList,
             Map<String, StreamField> constantFieldMap) {
         if (CollectionUtils.isEmpty(fieldList)) {
             return Lists.newArrayList();
@@ -505,7 +687,7 @@ public class LoadNodeUtils {
         return fieldList.stream()
                 .filter(sinkField -> StringUtils.isNotEmpty(sinkField.getSourceFieldName()))
                 .map(field -> {
-                    FieldInfo outputField = new FieldInfo(field.getFieldName(), sinkName,
+                    FieldInfo outputField = new FieldInfo(field.getFieldName(),
                             FieldInfoUtils.convertFieldFormat(field.getFieldType(), field.getFieldFormat()));
                     FunctionParam inputField;
                     String fieldKey = String.format("%s-%s", field.getOriginNodeName(), field.getSourceFieldName());
@@ -557,6 +739,61 @@ public class LoadNodeUtils {
                         String.format(ErrorCodeEnum.PARTITION_FIELD_NO_SOURCE_FIELD.getMessage(), fieldName));
             }
         }
+    }
+
+    /**
+     * Parse format
+     *
+     * @param formatName data serialization, support: csv, json, canal, avro, etc
+     * @param wrapWithInlongMsg whether wrap content with {@link InLongMsgFormat}
+     * @param separatorStr the separator of data content
+     * @param ignoreParseErrors whether ignore deserialization error data
+     * @return the format for serialized content
+     */
+    private static Format parsingFormat(
+            String formatName,
+            boolean wrapWithInlongMsg,
+            String separatorStr,
+            boolean ignoreParseErrors) {
+        Format format;
+        DataTypeEnum dataType = DataTypeEnum.forType(formatName);
+        switch (dataType) {
+            case CSV:
+                if (StringUtils.isNumeric(separatorStr)) {
+                    char dataSeparator = (char) Integer.parseInt(separatorStr);
+                    separatorStr = Character.toString(dataSeparator);
+                }
+                CsvFormat csvFormat = new CsvFormat(separatorStr);
+                csvFormat.setIgnoreParseErrors(ignoreParseErrors);
+                format = csvFormat;
+                break;
+            case AVRO:
+                format = new AvroFormat();
+                break;
+            case JSON:
+                JsonFormat jsonFormat = new JsonFormat();
+                jsonFormat.setIgnoreParseErrors(ignoreParseErrors);
+                format = jsonFormat;
+                break;
+            case CANAL:
+                format = new CanalJsonFormat();
+                break;
+            case DEBEZIUM_JSON:
+                DebeziumJsonFormat debeziumJsonFormat = new DebeziumJsonFormat();
+                debeziumJsonFormat.setIgnoreParseErrors(ignoreParseErrors);
+                format = debeziumJsonFormat;
+                break;
+            case RAW:
+                format = new RawFormat();
+                break;
+            default:
+                throw new IllegalArgumentException(String.format("Unsupported dataType=%s", dataType));
+        }
+        if (wrapWithInlongMsg) {
+            Format innerFormat = format;
+            format = new InLongMsgFormat(innerFormat, false);
+        }
+        return format;
     }
 
 }

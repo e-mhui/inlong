@@ -1,10 +1,10 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -18,10 +18,12 @@
 package org.apache.inlong.tubemq.corebase.daemon;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.inlong.tubemq.corebase.TBaseConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public abstract class AbstractDaemonService implements Service, Runnable {
+
     private static final Logger logger =
             LoggerFactory.getLogger(AbstractDaemonService.class);
     private final String name;
@@ -39,14 +41,35 @@ public abstract class AbstractDaemonService implements Service, Runnable {
 
     @Override
     public void run() {
-        logger.info(new StringBuilder(256).append(name)
+        StringBuilder strBuff =
+                new StringBuilder(TBaseConstants.BUILDER_DEFAULT_SIZE);
+        logger.info(strBuff.append(name)
                 .append("-daemon-thread started").toString());
-        this.loopProcess(this.intervalMs);
-        logger.info(new StringBuilder(256).append(name)
+        strBuff.delete(0, strBuff.length());
+        // process daemon task
+        while (!isStopped()) {
+            try {
+                Thread.sleep(intervalMs);
+                loopProcess(strBuff);
+            } catch (InterruptedException e) {
+                strBuff.delete(0, strBuff.length());
+                logger.warn(strBuff.append(name)
+                        .append("-daemon-thread thread has been interrupted").toString());
+                strBuff.delete(0, strBuff.length());
+                return;
+            } catch (Throwable t) {
+                strBuff.delete(0, strBuff.length());
+                logger.error(strBuff.append(name)
+                        .append("-daemon-thread throw a exception").toString(), t);
+                strBuff.delete(0, strBuff.length());
+            }
+        }
+        logger.info(strBuff.append(name)
                 .append("-daemon-thread stopped").toString());
+        strBuff.delete(0, strBuff.length());
     }
 
-    protected abstract void loopProcess(long intervalMs);
+    protected abstract void loopProcess(StringBuilder strBuff);
 
     @Override
     public void start() {

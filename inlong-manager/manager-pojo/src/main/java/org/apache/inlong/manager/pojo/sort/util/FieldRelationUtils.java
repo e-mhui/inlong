@@ -20,9 +20,10 @@ package org.apache.inlong.manager.pojo.sort.util;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import java.util.Objects;
+import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.enums.FieldType;
 import org.apache.inlong.manager.common.enums.TransformType;
+import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.manager.pojo.stream.StreamField;
 import org.apache.inlong.manager.pojo.transform.TransformDefinition;
 import org.apache.inlong.manager.pojo.transform.TransformResponse;
@@ -33,7 +34,6 @@ import org.apache.inlong.manager.pojo.transform.replacer.StringReplacerDefinitio
 import org.apache.inlong.manager.pojo.transform.replacer.StringReplacerDefinition.ReplaceRule;
 import org.apache.inlong.manager.pojo.transform.splitter.SplitterDefinition;
 import org.apache.inlong.manager.pojo.transform.splitter.SplitterDefinition.SplitRule;
-import org.apache.inlong.manager.common.util.Preconditions;
 import org.apache.inlong.sort.formats.common.FormatInfo;
 import org.apache.inlong.sort.formats.common.StringTypeInfo;
 import org.apache.inlong.sort.protocol.FieldInfo;
@@ -50,6 +50,7 @@ import org.apache.inlong.sort.protocol.transformation.function.SplitIndexFunctio
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -84,9 +85,12 @@ public class FieldRelationUtils {
                         preNodes, constantFieldMap);
             case DE_DUPLICATION:
             case FILTER:
-                return createFieldRelations(fieldList, transformName, constantFieldMap);
+                return createFieldRelations(fieldList, constantFieldMap);
             case JOINER:
-                return createJoinerFieldRelations(fieldList, transformName, constantFieldMap);
+            case LOOKUP_JOINER:
+            case TEMPORAL_JOINER:
+            case INTERVAL_JOINER:
+                return createJoinerFieldRelations(fieldList, constantFieldMap);
             default:
                 throw new UnsupportedOperationException(
                         String.format("Unsupported transformType=%s", transformType));
@@ -96,7 +100,7 @@ public class FieldRelationUtils {
     /**
      * Create relation of fields.
      */
-    private static List<FieldRelation> createFieldRelations(List<StreamField> fieldList, String transformName,
+    private static List<FieldRelation> createFieldRelations(List<StreamField> fieldList,
             Map<String, StreamField> constantFieldMap) {
         return fieldList.stream()
                 .map(FieldInfoUtils::parseStreamField)
@@ -115,8 +119,7 @@ public class FieldRelationUtils {
                         inputField = new FieldInfo(fieldInfo.getName(), fieldInfo.getNodeId(),
                                 fieldInfo.getFormatInfo());
                     }
-                    FieldInfo outputField = new FieldInfo(fieldInfo.getName(), transformName,
-                            fieldInfo.getFormatInfo());
+                    FieldInfo outputField = new FieldInfo(fieldInfo.getName(), fieldInfo.getFormatInfo());
                     return new FieldRelation(inputField, outputField);
                 }).collect(Collectors.toList());
     }
@@ -124,7 +127,7 @@ public class FieldRelationUtils {
     /**
      * Create relation of fields in join function.
      */
-    private static List<FieldRelation> createJoinerFieldRelations(List<StreamField> fieldList, String transformName,
+    private static List<FieldRelation> createJoinerFieldRelations(List<StreamField> fieldList,
             Map<String, StreamField> constantFieldMap) {
         return fieldList.stream()
                 .map(streamField -> {
@@ -144,8 +147,7 @@ public class FieldRelationUtils {
                         inputField = new FieldInfo(streamField.getOriginFieldName(),
                                 streamField.getOriginNodeName(), formatInfo);
                     }
-                    FieldInfo outputField = new FieldInfo(streamField.getFieldName(),
-                            transformName, formatInfo);
+                    FieldInfo outputField = new FieldInfo(streamField.getFieldName(), formatInfo);
                     return new FieldRelation(inputField, outputField);
                 }).collect(Collectors.toList());
     }
@@ -157,7 +159,8 @@ public class FieldRelationUtils {
             List<StreamField> fieldList, String transformName,
             SplitterDefinition splitterDefinition, String preNodes,
             Map<String, StreamField> constantFieldMap) {
-        Preconditions.checkNotEmpty(preNodes, "PreNodes of splitter should not be null");
+        Preconditions.expectNotBlank(preNodes, ErrorCodeEnum.INVALID_PARAMETER,
+                "PreNodes of splitter should not be null");
         String preNode = preNodes.split(",")[0];
         List<SplitRule> splitRules = splitterDefinition.getSplitRules();
         Set<String> splitFields = Sets.newHashSet();
@@ -170,7 +173,7 @@ public class FieldRelationUtils {
         List<StreamField> filteredFieldList = fieldList.stream()
                 .filter(streamFieldInfo -> !splitFields.contains(streamFieldInfo.getFieldName()))
                 .collect(Collectors.toList());
-        fieldRelations.addAll(createFieldRelations(filteredFieldList, transformName, constantFieldMap));
+        fieldRelations.addAll(createFieldRelations(filteredFieldList, constantFieldMap));
         return fieldRelations;
     }
 
@@ -179,7 +182,8 @@ public class FieldRelationUtils {
      */
     private static List<FieldRelation> createReplacerFieldRelations(List<StreamField> fieldList, String transformName,
             StringReplacerDefinition replacerDefinition, String preNodes, Map<String, StreamField> constantFieldMap) {
-        Preconditions.checkNotEmpty(preNodes, "PreNodes of splitter should not be null");
+        Preconditions.expectNotBlank(preNodes, ErrorCodeEnum.INVALID_PARAMETER,
+                "PreNodes of splitter should not be null");
         String preNode = preNodes.split(",")[0];
         List<ReplaceRule> replaceRules = replacerDefinition.getReplaceRules();
         Set<String> replaceFields = Sets.newHashSet();
@@ -190,7 +194,7 @@ public class FieldRelationUtils {
         List<StreamField> filteredFieldList = fieldList.stream()
                 .filter(streamFieldInfo -> !replaceFields.contains(streamFieldInfo.getFieldName()))
                 .collect(Collectors.toList());
-        fieldRelations.addAll(createFieldRelations(filteredFieldList, transformName, constantFieldMap));
+        fieldRelations.addAll(createFieldRelations(filteredFieldList, constantFieldMap));
         return fieldRelations;
     }
 
@@ -199,7 +203,8 @@ public class FieldRelationUtils {
      */
     private static List<FieldRelation> createEncryptFieldRelations(List<StreamField> fieldList, String transformName,
             EncryptDefinition encryptDefinition, String preNodes, Map<String, StreamField> constantFieldMap) {
-        Preconditions.checkNotEmpty(preNodes, "PreNodes of encrypt should not be null");
+        Preconditions.expectNotBlank(preNodes, ErrorCodeEnum.INVALID_PARAMETER,
+                "PreNodes of encrypt should not be null");
         String preNode = preNodes.split(",")[0];
         List<EncryptRule> encryptRules = encryptDefinition.getEncryptRules();
         Set<String> encryptFields = Sets.newHashSet();
@@ -209,7 +214,7 @@ public class FieldRelationUtils {
         List<StreamField> filteredFieldList = fieldList.stream()
                 .filter(streamFieldInfo -> !encryptFields.contains(streamFieldInfo.getFieldName()))
                 .collect(Collectors.toList());
-        fieldRelations.addAll(createFieldRelations(filteredFieldList, transformName, constantFieldMap));
+        fieldRelations.addAll(createFieldRelations(filteredFieldList, constantFieldMap));
         return fieldRelations;
     }
 
@@ -295,8 +300,8 @@ public class FieldRelationUtils {
             SplitIndexFunction splitIndexFunction = new SplitIndexFunction(
                     fieldInfo, new StringConstantParam(separator), new ConstantParam(index));
             FieldInfo targetFieldInfo = new FieldInfo(
-                    targetSources.get(index), transformName, FieldInfoUtils.convertFieldFormat(FieldType.STRING.name())
-            );
+                    targetSources.get(index), transformName,
+                    FieldInfoUtils.convertFieldFormat(FieldType.STRING.name()));
             splitFields.add(targetSources.get(index));
             splitRelations.add(new FieldRelation(splitIndexFunction, targetFieldInfo));
         }

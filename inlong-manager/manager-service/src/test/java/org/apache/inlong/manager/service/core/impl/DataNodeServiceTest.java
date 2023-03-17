@@ -17,16 +17,21 @@
 
 package org.apache.inlong.manager.service.core.impl;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.inlong.manager.common.consts.DataNodeType;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.node.DataNodeInfo;
 import org.apache.inlong.manager.pojo.node.DataNodePageRequest;
+import org.apache.inlong.manager.pojo.node.es.ElasticsearchDataNodeRequest;
 import org.apache.inlong.manager.pojo.node.hive.HiveDataNodeRequest;
 import org.apache.inlong.manager.service.ServiceBaseTest;
+import org.apache.inlong.manager.service.node.DataNodeOperator;
+import org.apache.inlong.manager.service.node.DataNodeOperatorFactory;
 import org.apache.inlong.manager.service.node.DataNodeService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.Map;
 
 /**
  * Data node service test for {@link DataNodeService}
@@ -35,6 +40,9 @@ public class DataNodeServiceTest extends ServiceBaseTest {
 
     @Autowired
     private DataNodeService dataNodeService;
+
+    @Autowired
+    private DataNodeOperatorFactory dataNodeOperatorFactory;
 
     /**
      * Save data node info.
@@ -48,7 +56,6 @@ public class DataNodeServiceTest extends ServiceBaseTest {
         request.setToken(password);
         request.setDescription("test cluster");
         request.setInCharges(GLOBAL_OPERATOR);
-        request.setJdbcUrl("127.0.0.1");
         request.setToken("123456");
         return dataNodeService.save(request, GLOBAL_OPERATOR);
     }
@@ -56,7 +63,7 @@ public class DataNodeServiceTest extends ServiceBaseTest {
     /**
      * Get data node list info.
      */
-    public PageInfo<DataNodeInfo> listOpt(String type, String name) {
+    public PageResult<DataNodeInfo> listOpt(String type, String name) {
         DataNodePageRequest request = new DataNodePageRequest();
         request.setType(type);
         request.setName(name);
@@ -99,12 +106,12 @@ public class DataNodeServiceTest extends ServiceBaseTest {
         Assertions.assertNotNull(id);
 
         // test get data node
-        DataNodeInfo dataNodeInfo = dataNodeService.get(id);
+        DataNodeInfo dataNodeInfo = dataNodeService.get(id, usename);
         Assertions.assertNotNull(dataNodeInfo);
         Assertions.assertEquals(type, dataNodeInfo.getType());
 
         // test get data node list
-        PageInfo<DataNodeInfo> listDataNode = this.listOpt(type, nodeName);
+        PageResult<DataNodeInfo> listDataNode = this.listOpt(type, nodeName);
         Assertions.assertEquals(listDataNode.getTotal(), 1);
 
         // test update data node
@@ -121,6 +128,19 @@ public class DataNodeServiceTest extends ServiceBaseTest {
         // test delete data node
         Boolean deleteSuccess = this.deleteOpt(id);
         Assertions.assertTrue(deleteSuccess);
+    }
+
+    @Test
+    public void testEsDataNode() {
+        ElasticsearchDataNodeRequest request = new ElasticsearchDataNodeRequest();
+        request.setName("esDataNodeName");
+        request.setInCharges(GLOBAL_OPERATOR);
+        int id = dataNodeService.save(request, GLOBAL_OPERATOR);
+        DataNodeInfo info = dataNodeService.get(id, GLOBAL_OPERATOR);
+        Assertions.assertEquals(DataNodeType.ELASTICSEARCH, info.getType());
+        DataNodeOperator operator = dataNodeOperatorFactory.getInstance(info.getType());
+        Map<String, String> params = operator.parse2SinkParams(info);
+        System.out.println(params);
     }
 
 }

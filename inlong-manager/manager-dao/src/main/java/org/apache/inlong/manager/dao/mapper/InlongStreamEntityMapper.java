@@ -17,8 +17,12 @@
 
 package org.apache.inlong.manager.dao.mapper;
 
+import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.cursor.Cursor;
+import org.apache.ibatis.mapping.ResultSetType;
 import org.apache.inlong.manager.dao.entity.InlongStreamEntity;
+import org.apache.inlong.manager.pojo.sort.standalone.SortSourceStreamInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamBriefInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamPageRequest;
 import org.springframework.stereotype.Repository;
@@ -50,6 +54,9 @@ public interface InlongStreamEntityMapper {
 
     int selectCountByGroupId(@Param("groupId") String groupId);
 
+    @Options(resultSetType = ResultSetType.FORWARD_ONLY, fetchSize = Integer.MIN_VALUE)
+    Cursor<SortSourceStreamInfo> selectAllStreams();
+
     int updateByPrimaryKey(InlongStreamEntity record);
 
     int updateByIdentifierSelective(InlongStreamEntity streamEntity);
@@ -62,13 +69,12 @@ public interface InlongStreamEntityMapper {
      */
     void logicDeleteDlqOrRlq(String groupId, String streamId, String operator);
 
-    int deleteByPrimaryKey(Integer id);
+    int deleteById(Integer id);
 
     /**
-     * Physically delete all inlong streams of the specified inlong group id
+     * Physically delete all inlong streams based on inlong group ids
      *
      * @return rows deleted
      */
-    int deleteAllByGroupId(@Param("groupId") String groupId);
-
+    int deleteByInlongGroupIds(@Param("groupIdList") List<String> groupIdList);
 }

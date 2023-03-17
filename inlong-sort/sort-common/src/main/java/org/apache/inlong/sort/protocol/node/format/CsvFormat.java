@@ -38,6 +38,8 @@ public class CsvFormat implements Format {
 
     private static final long serialVersionUID = 1L;
 
+    private static final String IDENTIFIER = "csv";
+
     @JsonProperty(value = "fieldDelimiter", defaultValue = ",")
     private String fieldDelimiter;
     @JsonProperty(value = "disableQuoteCharacter", defaultValue = "true")
@@ -79,10 +81,20 @@ public class CsvFormat implements Format {
         this(",", true, null, false, true, ";", null, null);
     }
 
+    @JsonCreator
+    public CsvFormat(String fieldDelimiter) {
+        this(fieldDelimiter, true, null, false, true, ";", null, null);
+    }
+
     @JsonIgnore
     @Override
     public String getFormat() {
-        return "csv";
+        return IDENTIFIER;
+    }
+
+    @Override
+    public String identifier() {
+        return IDENTIFIER;
     }
 
     /**

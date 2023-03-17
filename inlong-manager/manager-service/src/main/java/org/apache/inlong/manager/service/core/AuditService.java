@@ -17,16 +17,15 @@
 
 package org.apache.inlong.manager.service.core;
 
-import java.io.IOException;
-import java.util.List;
 import org.apache.inlong.manager.pojo.audit.AuditRequest;
 import org.apache.inlong.manager.pojo.audit.AuditVO;
+
+import java.util.List;
 
 /**
  * The service interface for audit.
  */
 public interface AuditService {
-
 
     /**
      * Query audit data for list by condition
@@ -34,6 +33,22 @@ public interface AuditService {
      * @param request The audit request of query condition
      * @return The result of query
      */
-    List<AuditVO> listByCondition(AuditRequest request) throws IOException;
+    List<AuditVO> listByCondition(AuditRequest request) throws Exception;
+
+    /**
+     * Get audit id by type and isSent.
+     *
+     * @param type audit type.
+     * @param isSent Whether to receive or send
+     * @return Audit id.
+     */
+    String getAuditId(String type, boolean isSent);
+
+    /**
+     * Refresh the base item of audit cache.
+     *
+     * @return true if not exception, or false if it has exception
+     */
+    Boolean refreshBaseItemCache();
 
 }

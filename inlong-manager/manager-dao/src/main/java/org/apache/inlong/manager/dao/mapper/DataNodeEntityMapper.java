@@ -17,7 +17,10 @@
 
 package org.apache.inlong.manager.dao.mapper;
 
+import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.cursor.Cursor;
+import org.apache.ibatis.mapping.ResultSetType;
 import org.apache.inlong.manager.dao.entity.DataNodeEntity;
 import org.apache.inlong.manager.pojo.node.DataNodePageRequest;
 import org.apache.inlong.manager.pojo.sort.standalone.SortSinkInfo;
@@ -32,9 +35,12 @@ public interface DataNodeEntityMapper {
 
     DataNodeEntity selectById(Integer id);
 
-    DataNodeEntity selectByNameAndType(@Param("name") String name, @Param("type") String type);
+    DataNodeEntity selectByUniqueKey(@Param("name") String name, @Param("type") String type);
 
     List<DataNodeEntity> selectByCondition(DataNodePageRequest request);
+
+    @Options(resultSetType = ResultSetType.FORWARD_ONLY, fetchSize = Integer.MIN_VALUE)
+    Cursor<DataNodeEntity> selectAllDataNodes();
 
     List<SortSinkInfo> selectAllSinkParams();
 

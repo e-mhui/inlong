@@ -17,7 +17,11 @@
 
 package org.apache.inlong.manager.web.auth.openapi;
 
+import com.google.common.collect.Sets;
+
 import lombok.extern.slf4j.Slf4j;
+
+import org.apache.inlong.manager.common.enums.UserTypeEnum;
 import org.apache.inlong.manager.pojo.user.UserInfo;
 import org.apache.inlong.manager.common.util.AESUtils;
 import org.apache.inlong.manager.common.util.Preconditions;
@@ -51,12 +55,15 @@ public class OpenAPIAuthenticatingRealm extends AuthenticatingRealm {
         SecretToken upToken = (SecretToken) authenticationToken;
         String username = upToken.getSecretId();
         UserInfo userInfo = userService.getByName(username);
-        Preconditions.checkNotNull(userInfo, "User doesn't exist");
-        Preconditions.checkTrue(userInfo.getDueDate().after(new Date()), "user has expired");
+        Preconditions.expectNotNull(userInfo, "User doesn't exist");
+        Preconditions.expectTrue(userInfo.getDueDate().after(new Date()), "user has expired");
         try {
             String secretKey = new String(
                     AESUtils.decryptAsString(userInfo.getSecretKey(), userInfo.getEncryptVersion()));
-            return new SimpleAuthenticationInfo(username, secretKey, getName());
+            userInfo.setRoles(Sets.newHashSet(userInfo.getAccountType() == 0
+                    ? UserTypeEnum.ADMIN.name()
+                    : UserTypeEnum.OPERATOR.name()));
+            return new SimpleAuthenticationInfo(userInfo, secretKey, getName());
         } catch (Exception e) {
             log.error("decrypt secret key fail: ", e);
             throw new AuthenticationException("internal error: " + e.getMessage());

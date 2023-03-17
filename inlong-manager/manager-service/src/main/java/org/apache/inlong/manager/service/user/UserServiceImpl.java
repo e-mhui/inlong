@@ -19,7 +19,6 @@ package org.apache.inlong.manager.service.user;
 
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.inlong.manager.common.consts.InlongConstants;
@@ -34,18 +33,28 @@ import org.apache.inlong.manager.common.util.RSAUtils;
 import org.apache.inlong.manager.common.util.SHAUtils;
 import org.apache.inlong.manager.dao.entity.UserEntity;
 import org.apache.inlong.manager.dao.mapper.UserEntityMapper;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.user.UserInfo;
+import org.apache.inlong.manager.pojo.user.UserLoginLockStatus;
+import org.apache.inlong.manager.pojo.user.UserLoginRequest;
 import org.apache.inlong.manager.pojo.user.UserRequest;
+import org.apache.shiro.SecurityUtils;
+import org.apache.shiro.authc.AuthenticationException;
+import org.apache.shiro.authc.UsernamePasswordToken;
+import org.apache.shiro.subject.Subject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * User service layer implementation
@@ -57,6 +66,14 @@ public class UserServiceImpl implements UserService {
 
     private static final Integer SECRET_KEY_SIZE = 16;
 
+    /**
+     * locked time, the unit is minute
+     */
+    private static final Integer LOCKED_TIME = 3;
+    private static final Integer LOCKED_THRESHOLD = 10;
+
+    private final Map<String, UserLoginLockStatus> loginLockStatusMap = new ConcurrentHashMap<>();
+
     @Autowired
     private UserEntityMapper userMapper;
 
@@ -65,8 +82,8 @@ public class UserServiceImpl implements UserService {
         String username = request.getName();
         UserEntity userExists = userMapper.selectByName(username);
         String password = request.getPassword();
-        Preconditions.checkNull(userExists, "username [" + username + "] already exists");
-        Preconditions.checkTrue(StringUtils.isNotBlank(password), "password cannot be blank");
+        Preconditions.expectNull(userExists, "username [" + username + "] already exists");
+        Preconditions.expectTrue(StringUtils.isNotBlank(password), "password cannot be blank");
 
         UserEntity entity = new UserEntity();
         entity.setName(username);
@@ -92,20 +109,19 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(errMsg);
         }
 
-        Preconditions.checkTrue(userMapper.insert(entity) > 0, "Create user failed");
+        Preconditions.expectTrue(userMapper.insert(entity) > 0, "Create user failed");
         LOGGER.debug("success to create user info={}", request);
         return entity.getId();
     }
 
     @Override
     public UserInfo getById(Integer userId, String currentUser) {
-        Preconditions.checkNotNull(userId, "User id cannot be null");
+        Preconditions.expectNotNull(userId, "User id cannot be null");
         UserEntity entity = userMapper.selectById(userId);
-        Preconditions.checkNotNull(entity, "User not exists with id " + userId);
-
+        Preconditions.expectNotNull(entity, "User not exists with id " + userId);
         UserEntity curUser = userMapper.selectByName(currentUser);
-        Preconditions.checkTrue(Objects.equals(UserTypeEnum.ADMIN.getCode(), curUser.getAccountType())
-                        || Objects.equals(entity.getName(), currentUser),
+        Preconditions.expectTrue(Objects.equals(UserTypeEnum.ADMIN.getCode(), curUser.getAccountType())
+                || Objects.equals(entity.getName(), currentUser),
                 "Current user does not have permission to get other users' info");
 
         UserInfo result = new UserInfo();
@@ -137,7 +153,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserInfo getByName(String name) {
-        Preconditions.checkNotNull(name, "User name cannot be null");
+        Preconditions.expectNotBlank(name, ErrorCodeEnum.INVALID_PARAMETER, "User name cannot be null");
         UserEntity entity = userMapper.selectByName(name);
         if (entity == null) {
             return null;
@@ -148,51 +164,53 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public PageInfo<UserInfo> list(UserRequest request) {
+    public PageResult<UserInfo> list(UserRequest request) {
         PageHelper.startPage(request.getPageNum(), request.getPageSize());
         Page<UserEntity> entityPage = (Page<UserEntity>) userMapper.selectByCondition(request);
         List<UserInfo> userList = CommonBeanUtils.copyListProperties(entityPage, UserInfo::new);
 
         // Check whether the user account has expired
         userList.forEach(entity -> entity.setStatus(entity.getDueDate().after(new Date()) ? "valid" : "invalid"));
-        PageInfo<UserInfo> page = new PageInfo<>(userList);
-        page.setTotal(entityPage.getTotal());
 
-        LOGGER.debug("success to list users for request={}, result size={}", request, page.getTotal());
-        return page;
+        PageResult<UserInfo> pageResult = new PageResult<>(userList, entityPage.getTotal(),
+                entityPage.getPageNum(), entityPage.getPageSize());
+
+        LOGGER.debug("success to list users for request={}, result size={}", request, pageResult.getTotal());
+        return pageResult;
     }
 
     @Override
     public Integer update(UserRequest request, String currentUser) {
         LOGGER.debug("begin to update user info={} by {}", request, currentUser);
-        Preconditions.checkNotNull(request, "Userinfo cannot be null");
-        Preconditions.checkNotNull(request.getId(), "User id cannot be null");
+        Preconditions.expectNotNull(request, "Userinfo cannot be null");
+        Preconditions.expectNotNull(request.getId(), "User id cannot be null");
 
         // Whether the current user is a manager
         UserEntity currentUserEntity = userMapper.selectByName(currentUser);
         String updateName = request.getName();
         boolean isAdmin = Objects.equals(UserTypeEnum.ADMIN.getCode(), currentUserEntity.getAccountType());
-        Preconditions.checkTrue(isAdmin || Objects.equals(updateName, currentUser),
+        Preconditions.expectTrue(isAdmin || Objects.equals(updateName, currentUser),
                 "You are not a manager and do not have permission to update other users");
 
         // manager cannot set himself as an ordinary
         boolean managerToOrdinary = isAdmin
                 && Objects.equals(UserTypeEnum.OPERATOR.getCode(), request.getAccountType())
                 && Objects.equals(currentUser, updateName);
-        Preconditions.checkFalse(managerToOrdinary, "You are a manager and you cannot change to an ordinary user");
+        Preconditions.expectFalse(managerToOrdinary, "You are a manager and you cannot change to an ordinary user");
 
         // target username must not exist
         UserEntity updateUserEntity = userMapper.selectById(request.getId());
-        Preconditions.checkNotNull(updateUserEntity, "User not exists with id=" + request.getId());
-        String errMsg = String.format("user has already updated with username=%s, curVersion=%s",
-                updateName, request.getVersion());
+        Preconditions.expectNotNull(updateUserEntity, "User not exists with id=" + request.getId());
+        String errMsg = String.format("user has already updated with username=%s, reqVersion=%s, storedVersion=%s",
+                updateName, request.getVersion(), updateUserEntity.getVersion());
         if (!Objects.equals(updateUserEntity.getVersion(), request.getVersion())) {
             LOGGER.error(errMsg);
             throw new BusinessException(ErrorCodeEnum.CONFIG_EXPIRED);
         }
 
         UserEntity targetUserEntity = userMapper.selectByName(updateName);
-        Preconditions.checkTrue(Objects.isNull(targetUserEntity)
+        Preconditions.expectTrue(
+                Objects.isNull(targetUserEntity)
                         || Objects.equals(targetUserEntity.getName(), updateUserEntity.getName()),
                 "Username [" + updateName + "] already exists");
 
@@ -200,11 +218,11 @@ public class UserServiceImpl implements UserService {
         if (!isAdmin) {
             String oldPassword = request.getPassword();
             String oldPasswordHash = SHAUtils.encrypt(oldPassword);
-            Preconditions.checkTrue(oldPasswordHash.equals(updateUserEntity.getPassword()), "Old password is wrong");
+            Preconditions.expectTrue(oldPasswordHash.equals(updateUserEntity.getPassword()), "Old password is wrong");
             Integer validDays = DateUtils.getValidDays(updateUserEntity.getCreateTime(), updateUserEntity.getDueDate());
-            Preconditions.checkTrue((request.getValidDays() <= validDays),
+            Preconditions.expectTrue((request.getValidDays() <= validDays),
                     "Ordinary users are not allowed to add valid days");
-            Preconditions.checkTrue(Objects.equals(updateUserEntity.getAccountType(), request.getAccountType()),
+            Preconditions.expectTrue(Objects.equals(updateUserEntity.getAccountType(), request.getAccountType()),
                     "Ordinary users are not allowed to update account type");
         }
 
@@ -229,19 +247,71 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public Boolean delete(Integer userId, String currentUser) {
-        Preconditions.checkNotNull(userId, "User id should not be empty");
+        Preconditions.expectNotNull(userId, "User id should not be empty");
 
         // Whether the current user is an administrator
         UserEntity curUser = userMapper.selectByName(currentUser);
         UserEntity entity = userMapper.selectById(userId);
-        Preconditions.checkTrue(curUser.getAccountType().equals(UserTypeEnum.ADMIN.getCode()),
+        Preconditions.expectTrue(curUser.getAccountType().equals(UserTypeEnum.ADMIN.getCode()),
                 "Current user is not a manager and does not have permission to delete users");
-        Preconditions.checkTrue(!Objects.equals(entity.getName(), currentUser),
+        Preconditions.expectTrue(!Objects.equals(entity.getName(), currentUser),
                 "Current user does not have permission to delete himself");
         userMapper.deleteById(userId);
 
         LOGGER.debug("success to delete user by id={}, current user={}", userId, currentUser);
         return true;
+    }
+
+    /**
+     * This implementation is just to intercept some error requests and reduce the pressure on the database.
+     * <p/>
+     * This is a memory-based implementation. There is a problem with concurrency security when there are
+     * multiple service nodes because the data in memory cannot be shared.
+     *
+     * @param req username login request
+     */
+    @Override
+    public void login(UserLoginRequest req) {
+        String username = req.getUsername();
+        UserLoginLockStatus userLoginLockStatus = loginLockStatusMap.getOrDefault(username, new UserLoginLockStatus());
+        LocalDateTime lockoutTime = userLoginLockStatus.getLockoutTime();
+        if (lockoutTime != null && lockoutTime.isAfter(LocalDateTime.now())) {
+            // part of a minute counts as one minute
+            long waitMinutes = Duration.between(LocalDateTime.now(), lockoutTime).toMinutes() + 1;
+            throw new BusinessException("account has been locked, please try again in " + waitMinutes + " minutes");
+        }
+
+        Subject subject = SecurityUtils.getSubject();
+        UsernamePasswordToken token = new UsernamePasswordToken(username, req.getPassword());
+        try {
+            subject.login(token);
+        } catch (AuthenticationException e) {
+            LOGGER.error("login error for request {}", req, e);
+            int loginErrorCount = userLoginLockStatus.getLoginErrorCount() + 1;
+
+            if (loginErrorCount % LOCKED_THRESHOLD == 0) {
+                LocalDateTime lockedTime = LocalDateTime.now().plusMinutes(LOCKED_TIME);
+                userLoginLockStatus.setLockoutTime(lockedTime);
+                LOGGER.error("account {} is locked, lockout time: {}", username, lockedTime);
+            }
+            userLoginLockStatus.setLoginErrorCount(loginErrorCount);
+
+            loginLockStatusMap.put(username, userLoginLockStatus);
+            throw e;
+        }
+
+        LoginUserUtils.setUserLoginInfo((UserInfo) subject.getPrincipal());
+
+        // login successfully, clear error count
+        userLoginLockStatus.setLoginErrorCount(0);
+        loginLockStatusMap.put(username, userLoginLockStatus);
+    }
+
+    public void checkUser(String inCharges, String user, String errMsg) {
+        UserEntity userEntity = userMapper.selectByName(user);
+        boolean isInCharge = Preconditions.inSeparatedString(user, inCharges, InlongConstants.COMMA);
+        Preconditions.expectTrue(isInCharge || UserTypeEnum.ADMIN.getCode().equals(userEntity.getAccountType()),
+                errMsg);
     }
 
 }

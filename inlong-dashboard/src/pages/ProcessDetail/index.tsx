@@ -18,7 +18,7 @@
  */
 
 import React, { useMemo, useRef } from 'react';
-import { Button, Card, Descriptions, Modal, message, Space } from 'antd';
+import { Button, Card, Modal, message, Space } from 'antd';
 import { parse } from 'qs';
 import { PageContainer, Container, FooterToolbar } from '@/components/PageContainer';
 import { useParams, useRequest, useLocation, useHistory } from '@/hooks';
@@ -26,14 +26,15 @@ import i18n from '@/i18n';
 import { timestampFormat } from '@/utils';
 import request from '@/utils/request';
 import Steps from './Steps';
-import Access from './Access';
+import Group from './Group';
 import Consume from './Consume';
 
-const workflowFormat = (applicant, startEvent, taskHistory = []) => {
+const workflowFormat = (applicant, startTime, startEvent, taskHistory = []) => {
   const taskHistoryMap = new Map(taskHistory.map(item => [item.name, item]));
   let data = [
     {
       title: i18n.t('pages.ApprovalDetail.SubmitApplication'),
+      subTitle: startTime ? timestampFormat(startTime) : '',
       name: '',
       desc: applicant,
       status: 'COMPLETED',
@@ -71,7 +72,7 @@ const Comp: React.FC = () => {
 
   const { id, type } = useParams<Record<string, string>>();
 
-  const taskId = useMemo<string>(() => parse(location.search.slice(1))?.taskId, [location.search]);
+  const taskId = useMemo(() => parse(location.search.slice(1))?.taskId, [location.search]);
 
   const formRef = useRef(null);
 
@@ -143,7 +144,12 @@ const Comp: React.FC = () => {
 
   const stepsData = useMemo(() => {
     if (workflow?.startEvent) {
-      return workflowFormat(processInfo?.applicant, workflow.startEvent, taskHistory);
+      return workflowFormat(
+        processInfo?.applicant,
+        processInfo?.startTime,
+        workflow.startEvent,
+        taskHistory,
+      );
     }
     return [];
   }, [workflow, processInfo, taskHistory]);
@@ -174,8 +180,8 @@ const Comp: React.FC = () => {
 
   const Form = useMemo(() => {
     return {
-      APPLY_GROUP_PROCESS: Access,
-      APPLY_CONSUMPTION_PROCESS: Consume,
+      APPLY_GROUP_PROCESS: Group,
+      APPLY_CONSUME_PROCESS: Consume,
     }[processInfo?.name];
   }, [processInfo]);
 
@@ -214,27 +220,16 @@ const Comp: React.FC = () => {
       ]}
       useDefaultContainer={false}
     >
-      <div style={{ display: 'flex' }}>
-        <Container style={{ flex: 1, marginRight: 20 }}>
-          <Card title={workflow?.displayName}>
-            <Descriptions>
-              <Descriptions.Item label={i18n.t('pages.ApprovalDetail.Applicant')}>
-                {processInfo?.applicant}
-              </Descriptions.Item>
-              <Descriptions.Item label={i18n.t('pages.ApprovalDetail.ApplicationTime')}>
-                {processInfo?.startTime ? timestampFormat(processInfo?.startTime) : ''}
-              </Descriptions.Item>
-            </Descriptions>
+      <Container>
+        <Card>
+          <Steps data={stepsData} />
+        </Card>
+      </Container>
 
-            {Form && <Form ref={formRef} {...formProps} />}
-          </Card>
-        </Container>
-        <Container style={{ flex: '0 0 200px' }}>
-          <Card title={i18n.t('pages.ApprovalDetail.ApprovalProcess')} style={{ height: '100%' }}>
-            <Steps data={stepsData} />
-          </Card>
-        </Container>
-      </div>
+      <Container>
+        <Card>{Form && <Form ref={formRef} {...formProps} />}</Card>
+      </Container>
+
       <FooterToolbar extra={<Footer />} />
     </PageContainer>
   );

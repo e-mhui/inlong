@@ -42,6 +42,16 @@ public interface StreamSourceEntityMapper {
     StreamSourceEntity selectForAgentTask(Integer id);
 
     /**
+     * Select one sub source by template id and agent ip.
+     *
+     * @param templateId template id
+     * @param agentIp agent ip
+     * @return stream source info
+     */
+    StreamSourceEntity selectOneByTemplatedIdAndAgentIp(@Param("templateId") Integer templateId,
+            @Param("agentIp") String agentIp);
+
+    /**
      * Query un-deleted sources by the given agentIp.
      */
     List<StreamSourceEntity> selectByAgentIp(@Param("agentIp") String agentIp);
@@ -76,17 +86,23 @@ public interface StreamSourceEntityMapper {
     /**
      * Query the tasks by the given status list and type List.
      */
-    List<StreamSourceEntity> selectByAgentIpOrCluster(@Param("statusList") List<Integer> statusList,
+    List<StreamSourceEntity> selectByAgentIpAndCluster(@Param("statusList") List<Integer> statusList,
             @Param("sourceTypeList") List<String> sourceTypeList, @Param("agentIp") String agentIp,
-            @Param("clusterName") String clusterName, @Param("limit") int limit);
+            @Param("clusterName") String clusterName);
 
     /**
-     * Query the sources with status 20x by the given agent IP and agent UUID.
+     * Query the template tasks by the given status list and type List and clusterName.
+     */
+    List<StreamSourceEntity> selectTemplateSourceByCluster(@Param("statusList") List<Integer> statusList,
+            @Param("sourceTypeList") List<String> sourceTypeList, @Param("clusterName") String clusterName);
+
+    /**
+     * Query the sources by the given status and Agent cluster info.
      *
      * @apiNote Sources with is_deleted > 0 should also be returned to agents to clear their local tasks.
      */
-    List<StreamSourceEntity> selectByStatusAndIp(@Param("statusList") List<Integer> statusList,
-            @Param("agentIp") String agentIp, @Param("uuid") String uuid);
+    List<StreamSourceEntity> selectByStatusAndCluster(@Param("statusList") List<Integer> statusList,
+            @Param("clusterName") String clusterName, @Param("agentIp") String agentIp, @Param("uuid") String uuid);
 
     /**
      * Select all sources by groupIds
@@ -103,7 +119,16 @@ public interface StreamSourceEntityMapper {
      */
     List<String> selectSourceType(@Param("groupId") String groupId, @Param("streamId") String streamId);
 
+    /**
+     * Query need update source according to the dataNodeName , clusterName, sourceType
+     */
+    List<Integer> selectNeedUpdateIdsByClusterAndDataNode(@Param("clusterName") String clusterName,
+            @Param("nodeName") String nodeName, @Param("sourceType") String sourceType);
+
     int updateByPrimaryKeySelective(StreamSourceEntity record);
+
+    int updateByRelatedId(@Param("groupId") String groupId, @Param("streamId") String streamId,
+            @Param("status") Integer status);
 
     int updateByPrimaryKey(StreamSourceEntity record);
 
@@ -129,11 +154,26 @@ public interface StreamSourceEntityMapper {
 
     int updateSnapshot(StreamSourceEntity entity);
 
-    int appendAgentIp(@Param("id") Integer id, @Param("agentIp") String agentIp);
+    /**
+     * Update the source status
+     *
+     * @param idList source id list
+     * @param status modify the status to this
+     * @param operator operator name
+     */
+    void updateStatusByIds(@Param("idList") List<Integer> idList, @Param("status") Integer status,
+            @Param("operator") String operator);
 
     /**
-     * Physical delete stream sources.
+     * Physical delete stream sources by group id and stream id
      */
     int deleteByRelatedId(@Param("groupId") String groupId, @Param("streamId") String streamId);
+
+    /**
+     * Physically delete all stream sources based on inlong group ids
+     *
+     * @return rows deleted
+     */
+    int deleteByInlongGroupIds(@Param("groupIdList") List<String> groupIdList);
 
 }

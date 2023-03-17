@@ -17,12 +17,14 @@
 
 package org.apache.inlong.manager.service.stream;
 
-import com.github.pagehelper.PageInfo;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.stream.InlongStreamApproveRequest;
 import org.apache.inlong.manager.pojo.stream.InlongStreamBriefInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamInfo;
 import org.apache.inlong.manager.pojo.stream.InlongStreamPageRequest;
 import org.apache.inlong.manager.pojo.stream.InlongStreamRequest;
+import org.apache.inlong.manager.pojo.stream.StreamField;
+import org.apache.inlong.manager.pojo.user.UserInfo;
 
 import java.util.List;
 
@@ -44,21 +46,13 @@ public interface InlongStreamService {
     Integer save(InlongStreamRequest request, String operator);
 
     /**
-     * Query the details of the specified inlong stream
+     * Save inlong stream information.
      *
-     * @param groupId Inlong group id
-     * @param streamId Inlong stream id
-     * @return inlong stream details
+     * @param request Inlong stream information.
+     * @param opInfo userinfo of operator
+     * @return Id after successful save.
      */
-    InlongStreamInfo get(String groupId, String streamId);
-
-    /**
-     * List streams contained in one group
-     *
-     * @param groupId inlong group id.
-     * @return Inlong stream info list
-     */
-    List<InlongStreamInfo> list(String groupId);
+    Integer save(InlongStreamRequest request, UserInfo opInfo);
 
     /**
      * Query whether the inlong stream ID exists
@@ -70,12 +64,48 @@ public interface InlongStreamService {
     Boolean exist(String groupId, String streamId);
 
     /**
+     * Query the details of the specified inlong stream
+     *
+     * @param groupId Inlong group id
+     * @param streamId Inlong stream id
+     * @return inlong stream details
+     */
+    InlongStreamInfo get(String groupId, String streamId);
+
+    /**
+     * Query the details of the specified inlong stream
+     *
+     * @param groupId Inlong group id
+     * @param streamId Inlong stream id
+     * @param opInfo userinfo of operator
+     * @return inlong stream details
+     */
+    InlongStreamInfo get(String groupId, String streamId, UserInfo opInfo);
+
+    /**
+     * List streams contained in one group
+     *
+     * @param groupId inlong group id.
+     * @return Inlong stream info list
+     */
+    List<InlongStreamInfo> list(String groupId);
+
+    /**
      * Paging query inlong stream brief info list
      *
      * @param request query request
      * @return inlong stream brief list
      */
-    PageInfo<InlongStreamBriefInfo> listBrief(InlongStreamPageRequest request);
+    PageResult<InlongStreamBriefInfo> listBrief(InlongStreamPageRequest request);
+
+    /**
+     * Query inlong stream brief info list
+     *
+     * @param request query request
+     * @param opInfo userinfo of operator
+     * @return inlong stream brief list
+     */
+    List<InlongStreamBriefInfo> listBrief(InlongStreamPageRequest request, UserInfo opInfo);
 
     /**
      * Paging query inlong stream full info list, and get all related sources and sinks
@@ -83,7 +113,7 @@ public interface InlongStreamService {
      * @param request query request
      * @return inlong stream info list
      */
-    PageInfo<InlongStreamInfo> listAll(InlongStreamPageRequest request);
+    PageResult<InlongStreamInfo> listAll(InlongStreamPageRequest request);
 
     /**
      * Get the inlong stream brief list and related sink brief list.
@@ -94,7 +124,7 @@ public interface InlongStreamService {
     List<InlongStreamBriefInfo> listBriefWithSink(String groupId);
 
     /**
-     * InlongStream info that needs to be modified
+     * Update the InlongStream info
      *
      * @param request inlong stream info that needs to be modified
      * @param operator Edit person's name
@@ -103,7 +133,28 @@ public interface InlongStreamService {
     Boolean update(InlongStreamRequest request, String operator);
 
     /**
-     * Delete the specified inlong stream
+     * Update the InlongStream info
+     *
+     * @param request inlong stream info that needs to be modified
+     * @param opInfo userinfo of operator
+     * @return whether succeed
+     */
+    Boolean update(InlongStreamRequest request, UserInfo opInfo);
+
+    /**
+     * Update the InlongStream - not check the InlongGroup status to which the stream belongs.
+     *
+     * @param request inlong stream info that needs to be modified
+     * @param operator Edit person's name
+     * @return whether succeed
+     */
+    Boolean updateWithoutCheck(InlongStreamRequest request, String operator);
+
+    /**
+     * Delete the specified inlong stream.
+     * <p/>
+     * When deleting an inlong stream, you need to check whether there are some related
+     * stream_sources or stream_sinks
      *
      * @param groupId Inlong group id
      * @param streamId Inlong stream id
@@ -111,6 +162,19 @@ public interface InlongStreamService {
      * @return whether succeed
      */
     Boolean delete(String groupId, String streamId, String operator);
+
+    /**
+     * Delete the specified inlong stream.
+     * <p/>
+     * When deleting an inlong stream, you need to check whether there are some related
+     * stream_sources or stream_sinks
+     *
+     * @param groupId Inlong group id
+     * @param streamId Inlong stream id
+     * @param opInfo userinfo of operator
+     * @return whether succeed
+     */
+    Boolean delete(String groupId, String streamId, UserInfo opInfo);
 
     /**
      * Logically delete all inlong streams under the specified groupId
@@ -167,4 +231,11 @@ public interface InlongStreamService {
      */
     void logicDeleteDlqOrRlq(String bid, String topicName, String operator);
 
+    /**
+     * Converts a json string to a streamFields
+     *
+     * @param fieldsJson JSON string for the field information
+     * @return list of stream field
+     */
+    List<StreamField> parseFields(String fieldsJson);
 }

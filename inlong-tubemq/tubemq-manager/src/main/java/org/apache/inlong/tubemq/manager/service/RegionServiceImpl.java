@@ -52,10 +52,10 @@ public class RegionServiceImpl implements RegionService {
 
     @Override
     public TubeMQResult createNewRegion(RegionEntry regionEntry,
-                                        List<Long> brokerIdList) {
+            List<Long> brokerIdList) {
         try {
             Long clusterId = regionEntry.getClusterId();
-            if (!brokerService.checkIfBrokersAllExsit(brokerIdList, clusterId)) {
+            if (!brokerService.checkIfBrokersAllExist(brokerIdList, clusterId)) {
                 return TubeMQResult.errorResult(TubeMQErrorConst.RESOURCE_NOT_EXIST);
             }
             if (existBrokerIdAlreadyInRegion(clusterId, brokerIdList, null)) {

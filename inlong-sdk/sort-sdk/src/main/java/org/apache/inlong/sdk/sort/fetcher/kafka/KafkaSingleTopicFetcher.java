@@ -13,7 +13,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.apache.inlong.sdk.sort.fetcher.kafka;
@@ -55,6 +54,7 @@ import java.util.concurrent.TimeUnit;
  * Kafka single topic fetcher.
  */
 public class KafkaSingleTopicFetcher extends SingleTopicFetcher {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaSingleTopicFetcher.class);
     private final ConcurrentHashMap<TopicPartition, OffsetAndMetadata> commitOffsetMap = new ConcurrentHashMap<>();
     private String bootstrapServers;
@@ -79,7 +79,7 @@ public class KafkaSingleTopicFetcher extends SingleTopicFetcher {
                 this.seeker = SeekerFactory.createKafkaSeeker(consumer, topic);
                 consumer.subscribe(Collections.singletonList(topic.getTopic()),
                         new AckOffsetOnRebalance(this.topic.getInLongCluster().getClusterId(), seeker,
-                                commitOffsetMap));
+                                commitOffsetMap, consumer));
             } else {
                 LOGGER.info("consumer is null");
                 return false;
@@ -90,7 +90,7 @@ public class KafkaSingleTopicFetcher extends SingleTopicFetcher {
             fetchThread.start();
             LOGGER.info("start to start thread:{}", threadName);
         } catch (Exception e) {
-            LOGGER.error("fail to init kafka single topic fetcher: {}",e.getMessage(), e);
+            LOGGER.error("fail to init kafka single topic fetcher: {}", e.getMessage(), e);
             return false;
         }
         return true;
@@ -209,16 +209,16 @@ public class KafkaSingleTopicFetcher extends SingleTopicFetcher {
          *
          * @param messageRecords {@link List < MessageRecord >}
          */
-        private void handleAndCallbackMsg(List<MessageRecord> messageRecords) {
+        private void handleAndCallbackMsg(List<MessageRecord> messageRecords, int partition) {
             long start = System.currentTimeMillis();
             try {
-                context.getStateCounterByTopic(topic).addCallbackTimes(1);
+                context.addCallBack(topic, partition);
                 context.getConfig().getCallback().onFinishedBatch(messageRecords);
-                context.getStateCounterByTopic(topic)
-                        .addCallbackTimeCost(System.currentTimeMillis() - start)
-                        .addCallbackDoneTimes(1);
+                context.addCallBackSuccess(topic, partition, messageRecords.size(),
+                        System.currentTimeMillis() - start);
             } catch (Exception e) {
-                context.getStateCounterByTopic(topic).addCallbackErrorTimes(1);
+                context.addCallBackFail(topic, partition, messageRecords.size(),
+                        System.currentTimeMillis() - start);
                 LOGGER.error("failed to callback: {}", e.getMessage(), e);
             }
         }
@@ -257,7 +257,7 @@ public class KafkaSingleTopicFetcher extends SingleTopicFetcher {
                     // commit
                     commitKafkaOffset();
                 } catch (Exception e) {
-                    context.getStateCounterByTopic(topic).addFetchErrorTimes(1);
+                    context.addConsumeError(topic, -1, -1);
                     LOGGER.error(e.getMessage(), e);
                 } finally {
                     if (hasPermit) {
@@ -268,35 +268,38 @@ public class KafkaSingleTopicFetcher extends SingleTopicFetcher {
         }
 
         private void fetchFromKafka() throws Exception {
-            context.getStateCounterByTopic(topic).addMsgCount(1).addFetchTimes(1);
+            context.addConsumeTime(topic, -1);
 
             long startFetchTime = System.currentTimeMillis();
             ConsumerRecords<byte[], byte[]> records = consumer
                     .poll(Duration.ofMillis(context.getConfig().getKafkaFetchWaitMs()));
-            context.getStateCounterByTopic(topic).addFetchTimeCost(System.currentTimeMillis() - startFetchTime);
+            long fetchTimeCost = System.currentTimeMillis() - startFetchTime;
             if (null != records && !records.isEmpty()) {
 
-                List<MessageRecord> msgs = new ArrayList<>();
                 for (ConsumerRecord<byte[], byte[]> msg : records) {
+                    List<MessageRecord> msgs = new ArrayList<>();
                     String offsetKey = getOffset(msg.partition(), msg.offset());
                     List<InLongMessage> inLongMessages = deserializer
                             .deserialize(context, topic, getMsgHeaders(msg.headers()), msg.value());
+                    context.addConsumeSuccess(topic, msg.partition(), inLongMessages.size(), msg.value().length,
+                            fetchTimeCost);
+                    int originSize = inLongMessages.size();
                     inLongMessages = interceptor.intercept(inLongMessages);
                     if (inLongMessages.isEmpty()) {
                         ack(offsetKey);
                         continue;
                     }
+                    int filterSize = originSize - inLongMessages.size();
+                    context.addConsumeFilter(topic, msg.partition(), filterSize);
 
                     msgs.add(new MessageRecord(topic.getTopicKey(),
                             inLongMessages,
                             offsetKey, System.currentTimeMillis()));
-                    context.getStateCounterByTopic(topic).addConsumeSize(msg.value().length);
+                    handleAndCallbackMsg(msgs, msg.partition());
                 }
-                context.getStateCounterByTopic(topic).addMsgCount(msgs.size());
-                handleAndCallbackMsg(msgs);
                 sleepTime = 0L;
             } else {
-                context.getStateCounterByTopic(topic).addEmptyFetchTimes(1);
+                context.addConsumeEmpty(topic, -1, fetchTimeCost);
                 emptyFetchTimes++;
                 if (emptyFetchTimes >= context.getConfig().getEmptyPollTimes()) {
                     sleepTime = Math.min((sleepTime += context.getConfig().getEmptyPollSleepStepMs()),

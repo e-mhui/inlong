@@ -17,14 +17,15 @@
  * under the License.
  */
 
-import React, { useMemo, useImperativeHandle, forwardRef } from 'react';
-import { Button, Space, message } from 'antd';
+import React, { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
+import { Button, message, Space, Table } from 'antd';
 import FormGenerator, { useForm } from '@/components/FormGenerator';
-import { useRequest, useBoolean } from '@/hooks';
+import { useBoolean, useRequest } from '@/hooks';
 import request from '@/utils/request';
 import { useTranslation } from 'react-i18next';
+import { useDefaultMeta } from '@/metas';
 import { CommonInterface } from '../common';
-import { getFormContent } from './config';
+import { useFormContent } from './config';
 
 type Props = CommonInterface;
 
@@ -32,28 +33,32 @@ const Comp = ({ id, readonly, isCreate }: Props, ref) => {
   const { t } = useTranslation();
   const [editing, { setTrue, setFalse }] = useBoolean(false);
 
+  const { defaultValue } = useDefaultMeta('consume');
+
+  const [mqType, setMqType] = useState(defaultValue);
+
+  const [clusterInfos, setClusterInfos] = useState([]);
+
   const [form] = useForm();
 
   const isUpdate = useMemo(() => {
     return !!id;
   }, [id]);
 
-  const { data, run: getDetail } = useRequest(
-    {
-      url: `/consumption/get/${id}`,
+  const { data, run: getDetail } = useRequest(`/consume/get/${id}`, {
+    ready: isUpdate,
+    refreshDeps: [id],
+    formatResult: result => ({
+      ...result,
+      inCharges: result.inCharges?.split(',') || [],
+      topic: result.topic?.split(','),
+    }),
+    onSuccess: data => {
+      form.setFieldsValue(data);
+      setMqType(data.mqType);
+      setClusterInfos(data.clusterInfos);
     },
-    {
-      ready: !!id,
-      refreshDeps: [id],
-      formatResult: result => ({
-        ...result,
-        inCharges: result.inCharges?.split(',') || [],
-      }),
-      onSuccess: data => {
-        form.setFieldsValue(data);
-      },
-    },
-  );
+  });
 
   const onOk = async () => {
     const values = await form.validateFields();
@@ -61,20 +66,19 @@ const Comp = ({ id, readonly, isCreate }: Props, ref) => {
       ...values,
       inCharges: values.inCharges.join(','),
       consumerGroup: values.consumerGroup || data?.consumerGroup,
-      topic: Array.isArray(values.topic) ? values.topic.join(',') : values.topic,
-      version: data?.version,
-      mqExtInfo: {
-        ...values.mqExtInfo,
-        mqType: values.mqType,
-      },
+      topic: values.topic?.join(','),
     };
 
-    const result = await request({
-      url: isUpdate ? `/consumption/update/${id}` : '/consumption/save',
+    if (isUpdate) {
+      submitData.id = data?.id;
+      submitData.version = data?.version;
+    }
+
+    return await request({
+      url: isUpdate ? `/consume/update` : '/consume/save',
       method: 'POST',
       data: submitData,
     });
-    return result;
   };
 
   useImperativeHandle(ref, () => ({
@@ -93,17 +97,36 @@ const Comp = ({ id, readonly, isCreate }: Props, ref) => {
     setFalse();
   };
 
+  const formContent = useFormContent({
+    mqType,
+    editing,
+    isCreate,
+  });
+
   return (
     <div style={{ position: 'relative' }}>
       <FormGenerator
         form={form}
-        content={getFormContent({
-          editing,
-          isCreate,
-        })}
-        allValues={data}
+        content={formContent}
+        initialValues={data}
+        onValuesChange={(c, values) => setMqType(values.mqType)}
         useMaxWidth={800}
       />
+      {!isCreate && <label>{t('pages.ConsumeDetail.ClusterInfo')}</label>}
+      {!isCreate && (
+        <Table
+          size="small"
+          columns={[
+            { title: 'name', dataIndex: 'name' },
+            { title: 'type', dataIndex: 'type' },
+            { title: 'serviceUrl', dataIndex: 'url' },
+            { title: 'adminUrl', dataIndex: 'adminUrl' },
+          ]}
+          style={{ marginTop: 20 }}
+          dataSource={clusterInfos}
+          rowKey="name"
+        ></Table>
+      )}
 
       {!isCreate && !readonly && (
         <div style={{ position: 'absolute', top: 0, right: 0 }}>

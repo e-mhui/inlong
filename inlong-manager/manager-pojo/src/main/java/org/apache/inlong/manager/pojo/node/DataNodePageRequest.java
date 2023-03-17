@@ -22,6 +22,9 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.apache.inlong.manager.pojo.common.PageRequest;
+import org.hibernate.validator.constraints.Length;
+
+import javax.validation.constraints.Pattern;
 
 /**
  * Data node paging query conditions
@@ -32,9 +35,12 @@ import org.apache.inlong.manager.pojo.common.PageRequest;
 public class DataNodePageRequest extends PageRequest {
 
     @ApiModelProperty(value = "Data node type, including MYSQL, HIVE, KAFKA, ES, etc.")
+    @Length(max = 20, message = "length must be less than or equal to 20")
     private String type;
 
     @ApiModelProperty(value = "Data node name")
+    @Length(min = 1, max = 128, message = "length must be between 1 and 128")
+    @Pattern(regexp = "^[A-Za-z0-9_-]{1,128}$", message = "only supports letters, numbers, '-', or '_'")
     private String name;
 
     @ApiModelProperty(value = "Keywords, name, url, etc.")
@@ -45,5 +51,8 @@ public class DataNodePageRequest extends PageRequest {
 
     @ApiModelProperty(value = "Current user", hidden = true)
     private String currentUser;
+
+    @ApiModelProperty(value = "Whether the current user is in the administrator role", hidden = true)
+    private Boolean isAdminRole;
 
 }

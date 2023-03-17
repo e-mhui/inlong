@@ -17,15 +17,18 @@
 
 package org.apache.inlong.manager.client.api.inner.client;
 
-import com.github.pagehelper.PageInfo;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.inlong.manager.client.api.ClientConfiguration;
 import org.apache.inlong.manager.client.api.service.StreamSinkApi;
 import org.apache.inlong.manager.client.api.util.ClientUtils;
+import org.apache.inlong.manager.common.util.Preconditions;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.common.Response;
+import org.apache.inlong.manager.pojo.common.UpdateResult;
+import org.apache.inlong.manager.pojo.sink.SinkPageRequest;
+import org.apache.inlong.manager.pojo.sink.SinkField;
 import org.apache.inlong.manager.pojo.sink.SinkRequest;
 import org.apache.inlong.manager.pojo.sink.StreamSink;
-import org.apache.inlong.manager.common.util.Preconditions;
 
 import java.util.List;
 
@@ -41,7 +44,7 @@ public class StreamSinkClient {
     }
 
     public Integer createSink(SinkRequest sinkRequest) {
-        Response<Integer> response = ClientUtils.executeHttpCall(streamSinkApi.createSink(sinkRequest));
+        Response<Integer> response = ClientUtils.executeHttpCall(streamSinkApi.save(sinkRequest));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }
@@ -50,8 +53,17 @@ public class StreamSinkClient {
      * Delete stream sink info by ID.
      */
     public boolean deleteSink(int id) {
-        Preconditions.checkTrue(id > 0, "sinkId is illegal");
-        Response<Boolean> response = ClientUtils.executeHttpCall(streamSinkApi.deleteSink(id));
+        Preconditions.expectTrue(id > 0, "sinkId is illegal");
+        Response<Boolean> response = ClientUtils.executeHttpCall(streamSinkApi.deleteById(id));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData();
+    }
+
+    /**
+     * Delete stream sink by key
+     */
+    public boolean deleteSinkByKey(String groupId, String streamId, String name) {
+        Response<Boolean> response = ClientUtils.executeHttpCall(streamSinkApi.deleteByKey(groupId, streamId, name));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }
@@ -67,8 +79,20 @@ public class StreamSinkClient {
      * List stream sinks by the specified sink type.
      */
     public List<StreamSink> listSinks(String groupId, String streamId, String sinkType) {
-        Response<PageInfo<StreamSink>> response = ClientUtils.executeHttpCall(
-                streamSinkApi.listSinks(groupId, streamId, sinkType));
+        SinkPageRequest pageRequest = new SinkPageRequest();
+        pageRequest.setInlongGroupId(groupId);
+        pageRequest.setInlongStreamId(streamId);
+        pageRequest.setSinkType(sinkType);
+        Response<PageResult<StreamSink>> response = ClientUtils.executeHttpCall(streamSinkApi.list(pageRequest));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData().getList();
+    }
+
+    /**
+     * Paging query stream sink info based on conditions.
+     */
+    public List<StreamSink> listSinks(SinkPageRequest pageRequest) {
+        Response<PageResult<StreamSink>> response = ClientUtils.executeHttpCall(streamSinkApi.list(pageRequest));
         ClientUtils.assertRespSuccess(response);
         return response.getData().getList();
     }
@@ -77,13 +101,27 @@ public class StreamSinkClient {
      * Update the stream sink info.
      */
     public Pair<Boolean, String> updateSink(SinkRequest sinkRequest) {
-        Response<Boolean> responseBody = ClientUtils.executeHttpCall(streamSinkApi.updateSink(sinkRequest));
-        ClientUtils.assertRespSuccess(responseBody);
+        Response<Boolean> response = ClientUtils.executeHttpCall(streamSinkApi.updateById(sinkRequest));
+        ClientUtils.assertRespSuccess(response);
 
-        if (responseBody.getData() != null) {
-            return Pair.of(responseBody.getData(), responseBody.getErrMsg());
+        if (response.getData() != null) {
+            return Pair.of(response.getData(), response.getErrMsg());
         } else {
-            return Pair.of(false, responseBody.getErrMsg());
+            return Pair.of(false, response.getErrMsg());
+        }
+    }
+
+    /**
+     * Update the stream sink by key
+     */
+    public Pair<UpdateResult, String> updateSinkByKey(SinkRequest sinkRequest) {
+        Response<UpdateResult> response = ClientUtils.executeHttpCall(streamSinkApi.updateByKey(sinkRequest));
+        ClientUtils.assertRespSuccess(response);
+
+        if (response.getData() != null) {
+            return Pair.of(response.getData(), response.getErrMsg());
+        } else {
+            return Pair.of(new UpdateResult(), response.getErrMsg());
         }
     }
 
@@ -91,7 +129,19 @@ public class StreamSinkClient {
      * Get detail information of data sink.
      */
     public StreamSink getSinkInfo(Integer sinkId) {
-        Response<StreamSink> response = ClientUtils.executeHttpCall(streamSinkApi.getSinkInfo(sinkId));
+        Response<StreamSink> response = ClientUtils.executeHttpCall(streamSinkApi.get(sinkId));
+        ClientUtils.assertRespSuccess(response);
+        return response.getData();
+    }
+
+    /**
+     * Converts a json string to a sinkFields
+     *
+     * @param fieldsJson JSON string for the field information
+     * @return list of sink field
+     */
+    public List<SinkField> parseFields(String fieldsJson) {
+        Response<List<SinkField>> response = ClientUtils.executeHttpCall(streamSinkApi.parseFields(fieldsJson));
         ClientUtils.assertRespSuccess(response);
         return response.getData();
     }

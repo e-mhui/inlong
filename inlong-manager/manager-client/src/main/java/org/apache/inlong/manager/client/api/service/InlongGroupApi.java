@@ -17,12 +17,14 @@
 
 package org.apache.inlong.manager.client.api.service;
 
-import com.github.pagehelper.PageInfo;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.common.Response;
 import org.apache.inlong.manager.pojo.group.InlongGroupBriefInfo;
 import org.apache.inlong.manager.pojo.group.InlongGroupPageRequest;
 import org.apache.inlong.manager.pojo.group.InlongGroupRequest;
 import org.apache.inlong.manager.pojo.group.InlongGroupResetRequest;
+import org.apache.inlong.manager.pojo.group.InlongGroupTopicInfo;
+import org.apache.inlong.manager.pojo.group.InlongGroupTopicRequest;
 import org.apache.inlong.manager.pojo.workflow.WorkflowResult;
 import retrofit2.Call;
 import retrofit2.http.Body;
@@ -30,6 +32,8 @@ import retrofit2.http.DELETE;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
 import retrofit2.http.Path;
+
+import java.util.List;
 
 public interface InlongGroupApi {
 
@@ -40,7 +44,7 @@ public interface InlongGroupApi {
     Call<Response<Object>> getGroupInfo(@Path("id") String id);
 
     @POST("group/list")
-    Call<Response<PageInfo<InlongGroupBriefInfo>>> listGroups(@Body InlongGroupPageRequest request);
+    Call<Response<PageResult<InlongGroupBriefInfo>>> listGroups(@Body InlongGroupPageRequest request);
 
     @POST("group/save")
     Call<Response<String>> createGroup(@Body InlongGroupRequest request);
@@ -77,4 +81,7 @@ public interface InlongGroupApi {
 
     @GET("group/getTopic/{id}")
     Call<Response<Object>> getTopic(@Path("id") String id);
+
+    @GET("group/listTopics")
+    Call<Response<List<InlongGroupTopicInfo>>> listTopics(@Body InlongGroupTopicRequest request);
 }

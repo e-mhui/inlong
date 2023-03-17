@@ -18,8 +18,8 @@
 package org.apache.inlong.manager.service.source;
 
 import com.github.pagehelper.Page;
-import com.github.pagehelper.PageInfo;
 import org.apache.inlong.manager.dao.entity.StreamSourceEntity;
+import org.apache.inlong.manager.pojo.common.PageResult;
 import org.apache.inlong.manager.pojo.group.InlongGroupInfo;
 import org.apache.inlong.manager.pojo.source.SourceRequest;
 import org.apache.inlong.manager.pojo.source.StreamSource;
@@ -87,7 +87,7 @@ public interface StreamSourceOperator {
      * @param entityPage given entity page
      * @return source list response
      */
-    PageInfo<? extends StreamSource> getPageInfo(Page<StreamSourceEntity> entityPage);
+    PageResult<? extends StreamSource> getPageInfo(Page<StreamSourceEntity> entityPage);
 
     /**
      * Update the source info.
@@ -96,7 +96,7 @@ public interface StreamSourceOperator {
      * @param groupStatus the belongs group status
      * @param operator name of operator
      */
-    void updateOpt(SourceRequest request, Integer groupStatus, String operator);
+    void updateOpt(SourceRequest request, Integer groupStatus, Integer groupMode, String operator);
 
     /**
      * Stop the source task.

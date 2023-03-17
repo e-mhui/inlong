@@ -24,6 +24,7 @@ import lombok.EqualsAndHashCode;
 import org.apache.inlong.manager.pojo.common.PageRequest;
 
 import javax.validation.constraints.NotBlank;
+import java.util.List;
 
 /**
  * Paging query request for Source
@@ -43,10 +44,19 @@ public class SourcePageRequest extends PageRequest {
     @ApiModelProperty(value = "Source type, such as FILE")
     private String sourceType;
 
+    @ApiModelProperty(value = "Data node name")
+    private String dataNodeName;
+
+    @ApiModelProperty(value = "Inlong cluster name")
+    private String inlongClusterName;
+
     @ApiModelProperty(value = "Keyword, can be group id, stream id or source name")
     private String keyword;
 
     @ApiModelProperty(value = "Status")
     private Integer status;
+
+    @ApiModelProperty(value = "Source status list")
+    private List<Integer> statusList;
 
 }

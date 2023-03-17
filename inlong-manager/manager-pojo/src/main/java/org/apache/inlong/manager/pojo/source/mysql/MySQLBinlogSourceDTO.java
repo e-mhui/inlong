@@ -17,8 +17,6 @@
 
 package org.apache.inlong.manager.pojo.source.mysql;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,6 +24,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.inlong.manager.common.enums.ErrorCodeEnum;
 import org.apache.inlong.manager.common.exceptions.BusinessException;
+import org.apache.inlong.manager.common.util.JsonUtils;
 
 import javax.validation.constraints.NotNull;
 import java.util.Map;
@@ -38,8 +37,6 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MySQLBinlogSourceDTO {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper(); // thread safe
 
     @ApiModelProperty("Username of the MySQL server")
     private String user;
@@ -61,13 +58,11 @@ public class MySQLBinlogSourceDTO {
     private String includeSchema;
 
     @ApiModelProperty(value = "List of DBs to be collected, supporting regular expressions, "
-            + "seperated by ',', for example: db1,test_db*",
-            notes = "DBs not in this list are excluded. If not set, all DBs are monitored")
+            + "seperated by ',', for example: db1,test_db*", notes = "DBs not in this list are excluded. If not set, all DBs are monitored")
     private String databaseWhiteList;
 
     @ApiModelProperty(value = "List of tables to be collected, supporting regular expressions, "
-            + "seperated by ',', for example: tb1,user*",
-            notes = "Tables not in this list are excluded. By default, all tables are monitored")
+            + "seperated by ',', for example: tb1,user*", notes = "Tables not in this list are excluded. By default, all tables are monitored")
     private String tableWhiteList;
 
     @ApiModelProperty("Database time zone, Default is UTC")
@@ -151,10 +146,10 @@ public class MySQLBinlogSourceDTO {
 
     public static MySQLBinlogSourceDTO getFromJson(@NotNull String extParams) {
         try {
-            OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            return OBJECT_MAPPER.readValue(extParams, MySQLBinlogSourceDTO.class);
+            return JsonUtils.parseObject(extParams, MySQLBinlogSourceDTO.class);
         } catch (Exception e) {
-            throw new BusinessException(ErrorCodeEnum.SOURCE_INFO_INCORRECT.getMessage() + ": " + e.getMessage());
+            throw new BusinessException(ErrorCodeEnum.SOURCE_INFO_INCORRECT,
+                    String.format("parse extParams of MySQLBinlogSource failure: %s", e.getMessage()));
         }
     }
 

@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,15 +24,16 @@ import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.factories.DynamicTableSourceFactory;
 import org.apache.flink.table.factories.FactoryUtil;
-import org.apache.inlong.sort.base.util.ValidateMetricOptionUtils;
 
 import java.util.HashSet;
 import java.util.Set;
 
 import static com.ververica.cdc.debezium.table.DebeziumOptions.DEBEZIUM_OPTIONS_PREFIX;
 import static com.ververica.cdc.debezium.table.DebeziumOptions.getDebeziumProperties;
+import static org.apache.inlong.sort.base.Constants.AUDIT_KEYS;
 import static org.apache.inlong.sort.base.Constants.INLONG_AUDIT;
 import static org.apache.inlong.sort.base.Constants.INLONG_METRIC;
+import static org.apache.inlong.sort.base.Constants.SOURCE_MULTIPLE_ENABLE;
 
 /**
  * Factory for creating configured instance of
@@ -108,6 +108,39 @@ public class PostgreSQLTableFactory implements DynamicTableSourceFactory {
                                     + "to stream events to the connector that you are configuring. Default is "
                                     + "\"flink\".");
 
+    /**
+     * The session time zone in database server.
+     */
+    public static final ConfigOption<String> SERVER_TIME_ZONE =
+            ConfigOptions.key("server-time-zone")
+                    .stringType()
+                    .defaultValue("UTC")
+                    .withDescription("The session time zone in database server.");
+
+    /**
+     * row kinds to be filtered
+     */
+    public static final ConfigOption<String> ROW_KINDS_FILTERED =
+            ConfigOptions.key("row-kinds-filtered")
+                    .stringType()
+                    .defaultValue("+I&-U&+U&-D")
+                    .withDescription("row kinds to be filtered,"
+                            + " here filtered means keep the data of certain row kind"
+                            + "the format follows rowKind1&rowKind2, supported row kinds are "
+                            + "\"+I\" represents INSERT.\n"
+                            + "\"-U\" represents UPDATE_BEFORE.\n"
+                            + "\"+U\" represents UPDATE_AFTER.\n"
+                            + "\"-D\" represents DELETE.");
+
+    /**
+     * Whether works as append source.
+     */
+    public static final ConfigOption<Boolean> APPEND_MODE =
+            ConfigOptions.key("append-mode")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("Whether works as append source.");
+
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
         final FactoryUtil.TableFactoryHelper helper =
@@ -124,10 +157,14 @@ public class PostgreSQLTableFactory implements DynamicTableSourceFactory {
         int port = config.get(PORT);
         String pluginName = config.get(DECODING_PLUGIN_NAME);
         String slotName = config.get(SLOT_NAME);
+        String serverTimeZone = config.get(SERVER_TIME_ZONE);
         ResolvedSchema physicalSchema = context.getCatalogTable().getResolvedSchema();
-        String inlongMetric = config.get(INLONG_METRIC);
+        final boolean sourceMultipleEnable = config.get(SOURCE_MULTIPLE_ENABLE);
+        String inlongMetric = config.getOptional(INLONG_METRIC).orElse(null);
         String inlongAudit = config.get(INLONG_AUDIT);
-        ValidateMetricOptionUtils.validateInlongMetricIfSetInlongAudit(inlongMetric, inlongAudit);
+        final boolean appendSource = config.get(APPEND_MODE);
+        final String rowKindFiltered = config.get(ROW_KINDS_FILTERED).isEmpty() ? ROW_KINDS_FILTERED.defaultValue()
+                : config.get(ROW_KINDS_FILTERED);
 
         return new PostgreSQLTableSource(
                 physicalSchema,
@@ -140,7 +177,11 @@ public class PostgreSQLTableFactory implements DynamicTableSourceFactory {
                 password,
                 pluginName,
                 slotName,
+                serverTimeZone,
                 getDebeziumProperties(context.getCatalogTable().getOptions()),
+                appendSource,
+                rowKindFiltered,
+                sourceMultipleEnable,
                 inlongMetric,
                 inlongAudit);
     }
@@ -168,8 +209,13 @@ public class PostgreSQLTableFactory implements DynamicTableSourceFactory {
         options.add(PORT);
         options.add(DECODING_PLUGIN_NAME);
         options.add(SLOT_NAME);
+        options.add(SERVER_TIME_ZONE);
+        options.add(SOURCE_MULTIPLE_ENABLE);
         options.add(INLONG_METRIC);
         options.add(INLONG_AUDIT);
+        options.add(AUDIT_KEYS);
+        options.add(APPEND_MODE);
+        options.add(ROW_KINDS_FILTERED);
         return options;
     }
 }

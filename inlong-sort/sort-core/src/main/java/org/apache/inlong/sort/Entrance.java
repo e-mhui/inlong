@@ -52,10 +52,16 @@ public class Entrance {
         EnvironmentSettings settings = EnvironmentSettings.newInstance().useBlinkPlanner()
                 .inStreamingMode().build();
         StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env, settings);
+        tableEnv.getConfig().getConfiguration().setString(Constants.PIPELINE_NAME,
+                config.getString(Constants.JOB_NAME));
         String sqlFile = config.getString(Constants.SQL_SCRIPT_FILE);
         Parser parser;
         if (StringUtils.isEmpty(sqlFile)) {
             final GroupInfo groupInfo = getGroupInfoFromFile(config.getString(Constants.GROUP_INFO_FILE));
+            if (StringUtils.isNotEmpty(config.getString(Constants.METRICS_AUDIT_PROXY_HOSTS))) {
+                groupInfo.getProperties().putIfAbsent(Constants.METRICS_AUDIT_PROXY_HOSTS.key(),
+                        config.getString(Constants.METRICS_AUDIT_PROXY_HOSTS));
+            }
             parser = FlinkSqlParser.getInstance(tableEnv, groupInfo);
         } else {
             String statements = getStatementSetFromFile(sqlFile);
@@ -67,7 +73,7 @@ public class Entrance {
     }
 
     private static String getStatementSetFromFile(String fileName) throws IOException {
-        return Files.toString(new File(fileName), StandardCharsets.UTF_8);
+        return Files.asCharSource(new File(fileName), StandardCharsets.UTF_8).read();
     }
 
     private static GroupInfo getGroupInfoFromFile(String fileName) throws IOException {
