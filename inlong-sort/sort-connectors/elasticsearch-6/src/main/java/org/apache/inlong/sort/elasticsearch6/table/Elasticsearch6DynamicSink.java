@@ -174,6 +174,7 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
                 builder.setRestClientFactory(
                         new DefaultRestClientFactory(config.getPathPrefix().orElse(null)));
             }
+            builder.setMultipleSink(multipleSink);
             final ElasticsearchSink<RowData> sink = builder.build();
             if (config.isDisableFlushOnCheckpoint()) {
                 sink.disableFlushOnCheckpoint();
@@ -185,10 +186,9 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
     private ElasticsearchSinkFunction<RowData, DocWriteRequest<?>> createSinkFunction(
             SerializationSchema<RowData> format,
             Context context) {
-
         if (multipleSink) {
             return new MultipleRowElasticsearchSinkFunction(
-                    null, // this is deprecated in es 7+
+                    config.getDocumentType(), // this is deprecated in es 7+
                     format,
                     XContentType.JSON,
                     REQUEST_FACTORY,
@@ -204,7 +204,7 @@ final class Elasticsearch6DynamicSink implements DynamicTableSink {
 
         return new RowElasticsearchSinkFunction(
                 IndexGeneratorFactory.createIndexGenerator(config.getIndex(), schema),
-                null, // this is deprecated in es 7+
+                config.getDocumentType(), // this is deprecated in es 7+
                 format,
                 XContentType.JSON,
                 REQUEST_FACTORY,

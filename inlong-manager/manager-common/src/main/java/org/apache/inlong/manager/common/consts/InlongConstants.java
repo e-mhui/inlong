@@ -40,6 +40,8 @@ public class InlongConstants {
      */
     public static final String COMMA = ",";
 
+    public static final String DOT = ".";
+
     public static final String BLANK = " ";
 
     public static final String SLASH = "/";
@@ -163,7 +165,7 @@ public class InlongConstants {
 
     public static final Pattern PATTERN_NORMAL_CHARACTERS = Pattern.compile("^[a-zA-Z0-9_]*$");
 
-    public static final Set<String> STREAM_FORMAT_TYPES =
+    public static final Set<String> STREAM_FIELD_TYPES =
             Sets.newHashSet("string", "int", "long", "float", "double", "date", "timestamp");
 
 }
